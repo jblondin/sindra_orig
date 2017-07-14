@@ -1,6 +1,3 @@
-#![feature(log_syntax)]
-#![feature(trace_macros)]
-
 #[macro_use] extern crate lazy_static;
 extern crate regex;
 
