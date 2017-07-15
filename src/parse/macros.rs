@@ -56,11 +56,11 @@ macro_rules! statement_args {
 
 #[macro_export]
 macro_rules! statement_body {
-    ($parser:ident, $state:ident, $prec_ty:ty; ) => (); // endpoint
-    ($parser:ident, $state:ident, $prec_ty:ty; identifier<$ident_name:ident> $($rest:tt)*) => (
+    ($parser:ident, $prec_ty:ty; ) => (); // endpoint
+    ($parser:ident, $prec_ty:ty; identifier<$ident_name:ident> $($rest:tt)*) => (
         let $ident_name = {
-            if $state.peek().is_some() {
-                match $parser.parse_identifier($state) {
+            if $parser.state.peek().is_some() {
+                match $parser.parse_identifier() {
                     Ok(ident) => ident
                     Err(_) => { return Ok(None); }
                 }
@@ -69,12 +69,12 @@ macro_rules! statement_body {
                 return Ok(None);
             }
         };
-        statement_body!($parser, $state, $prec_ty; $($rest)*);
+        statement_body!($parser, $prec_ty; $($rest)*);
     );
-    ($parser:ident, $state:ident, $prec_ty:ty; expression<$expr_name:ident> $($rest:tt)*) => (
+    ($parser:ident, $prec_ty:ty; expression<$expr_name:ident> $($rest:tt)*) => (
         let $expr_name = {
-            if $state.peek().is_some() {
-                match $parser.parse_expression($state, <$prec_ty>::lowest()) {
+            if $parser.state.peek().is_some() {
+                match $parser.parse_expression(<$prec_ty>::lowest()) {
                     Ok(expr_opt) => {
                         match expr_opt {
                             Some(expr) => expr,
@@ -88,11 +88,11 @@ macro_rules! statement_body {
                 return Ok(None);
             }
         };
-        statement_body!($parser, $state, $prec_ty; $($rest)*);
+        statement_body!($parser, $prec_ty; $($rest)*);
     );
-    ($parser:ident, $state:ident, $prec_ty:ty; token<$tok:path> $($rest:tt)*) => (
+    ($parser:ident, $prec_ty:ty; token<$tok:path> $($rest:tt)*) => (
         {
-            if let Some(curr_tok) = $state.next() {
+            if let Some(curr_tok) = $parser.state.next() {
                 if &$tok != curr_tok {
                     // token doesn't match pattern, return none
                     return Ok(None);
@@ -102,7 +102,7 @@ macro_rules! statement_body {
                 return Ok(None);
             }
         }
-        statement_body!($parser, $state, $prec_ty; $($rest)*);
+        statement_body!($parser, $prec_ty; $($rest)*);
     );
 }
 

@@ -1,18 +1,4 @@
 
-// macro_rules! generate_token_type_code {
-//     (@step $idx:expr,) => {};
-//     (@step $idx:expr, $head:ident, $($tail:ident,)*) => {
-//         Token::
-//     }
-//     (
-//         $start:expr;
-//         $($d_lexeme:expr => $d_token:ident,)*;
-//         $($r_lexeme:expr => $r_rule:expr => $r_token:ident<$r_type:ty>,)*
-//     ) => {
-//         generate_token_type_code!(@step $start, $($n,)*);
-//     }
-// }
-
 #[macro_export]
 macro_rules! lexer {
     (
@@ -84,18 +70,29 @@ impl RegexList {
     }
 }
 
+pub trait Lex {
+    fn lex<'a>(&'a self) -> lex_errors::Result<'a, Vec<TokenSpan<'a>>>;
+}
+impl Lex for str {
+    fn lex<'a>(&'a self) -> lex_errors::Result<'a, Vec<TokenSpan<'a>>> {
+        Lexer::new(self).lex()
+    }
+}
+
 pub struct Lexer<'a> {
+    input: &'a str,
     direct_tokens: Vec<Token>,
     rules: Vec<fn(&'a str, &Captures) -> lex_errors::lex_token::Result<'a, Token>>,
 }
 impl<'a> Lexer<'a> {
-    pub fn new() -> Lexer<'a> {
+    pub fn new(input: &'a str) -> Lexer<'a> {
         Lexer {
+            input: input,
             direct_tokens: vec![$(Token::$d_token),*],
             rules: vec![$(_token_funcs::$r_token::parse),*],
         }
     }
-    pub fn lex(&'a self, input: &'a str) -> lex_errors::Result<'a, Vec<TokenSpan<'a>>> {
+    pub fn lex(&self) -> lex_errors::Result<'a, Vec<TokenSpan<'a>>> {
         // compile the regexes twice, once for when we need to match individual regexes, and once
         // in the regex set (which processes all at once)
         // we also anchor each expression so it only matches the beginning of the input
@@ -112,11 +109,11 @@ impl<'a> Lexer<'a> {
         let mut curr_pos = Position::start();
         let mut tokens = vec![];
         let whitespace_devourer = Regex::new(r"^\s+").unwrap();
-        let input_len = input.len();
+        let input_len = self.input.len();
 
         while curr_pos.byte < input_len {
             // eat some whitespace
-            if let Some(mat) = whitespace_devourer.find(&input[curr_pos.byte..]) {
+            if let Some(mat) = whitespace_devourer.find(&self.input[curr_pos.byte..]) {
                 debug_assert_eq!(mat.start(), 0); // anchored at begining of line
                 curr_pos.offset(&Offset::from_str(mat.as_str()));
                 if curr_pos.byte >= input_len {
@@ -125,18 +122,19 @@ impl<'a> Lexer<'a> {
             }
 
             // try to lex the next token
-            let (token, matched) = self.lex_token(&input[curr_pos.byte..], &regex_list, &set)
-                .map_err(|lte| lex_errors::ErrorKind::Spanned(lte, Span::new(input, curr_pos)))?;
+            let (token, matched) = self.lex_token(&self.input[curr_pos.byte..], &regex_list, &set)
+                .map_err(|lte| lex_errors::ErrorKind::Spanned(lte,
+                    Span::new(self.input, curr_pos)))?;
             let offset = Offset::from_str(matched);
             if offset.nbytes() == 0 {
                 return Err(lex_errors::ErrorKind::WithSpan(
                     "Regex error: 0-length string matched".to_string(),
-                    Span::new(input, curr_pos)));
+                    Span::new(self.input, curr_pos)));
             }
             let prev_pos = curr_pos;
             curr_pos.offset(&offset);
             tokens.push(TokenSpan::new(token,
-                Span::new(&input[prev_pos.byte..curr_pos.byte], prev_pos)));
+                Span::new(&self.input[prev_pos.byte..curr_pos.byte], prev_pos)));
         }
         Ok(tokens)
     }
@@ -146,8 +144,7 @@ impl<'a> Lexer<'a> {
         input: &'a str,
         regex_list: &RegexList,
         set: &RegexSet)
-        -> lex_errors::lex_token::Result<(Token, &'a str)>
-    {
+    -> lex_errors::lex_token::Result<'a, (Token, &'a str)> {
         debug_assert!(input.len() > 0);
 
         // general algorithm:
@@ -302,13 +299,12 @@ mod basic {
 
     #[test]
     fn test_multimatch() {
-        let lexer = Lexer::new();
-        println!("{:?}", lexer.lex("+"));
-        println!("{:?}", lexer.lex("+="));
-        println!("{:?}", lexer.lex("++="));
-        println!("{:?}", lexer.lex("    + += ++="));
-        println!("{:?}", lexer.lex("=
+        println!("{:?}", "+".lex());
+        println!("{:?}", "+=".lex());
+        println!("{:?}", "++=".lex());
+        println!("{:?}", "    + += ++=".lex());
+        println!("{:?}", "=
 
-            +=+"));
+            +=+".lex());
     }
 }

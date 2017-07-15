@@ -87,14 +87,11 @@ impl FromToken<$token_type> for InfixOp {
 }
 
 pub trait ParsePrefix{
-    fn parse_prefix(&self, parser: &Parser, state: &mut ParserState)
+    fn parse_prefix(&self, parser: &mut Parser)
         -> perrors::Result<Option<Expression>>;
 }
 impl ParsePrefix for $token_type {
-    fn parse_prefix(&self,
-        parser: &Parser,
-        state: &mut ParserState
-    ) -> perrors::Result<Option<Expression>> {
+    fn parse_prefix(&self, parser: &mut Parser) -> perrors::Result<Option<Expression>> {
         match *self {
             // add all the literals as prefixes
             $(
@@ -102,7 +99,7 @@ impl ParsePrefix for $token_type {
                 $literal_token(value) => Ok(Some(Expression::Literal(
                     Literal::from_token(&$literal_token(value)).unwrap()))),
             )*
-            $group_token_start => Ok(parser.parse_grouped_expression(state)?),
+            $group_token_start => Ok(parser.parse_grouped_expression()?),
             _ => Ok(None)
         }
     }
@@ -110,14 +107,13 @@ impl ParsePrefix for $token_type {
 
 pub trait ParseInfix: Precedence {
     // parse_infix _must_ advance tokens if it returns Ok(Some(_))
-    fn parse_infix(&self, left: Expression, parser: &Parser, state: &mut ParserState)
+    fn parse_infix(&self, left: Expression, parser: &mut Parser)
         -> perrors::Result<Option<Expression>>;
 }
 impl ParseInfix for $token_type {
     fn parse_infix(&self,
         left: Expression,
-        parser: &Parser,
-        state: &mut ParserState
+        parser: &mut Parser,
     ) -> perrors::Result<Option<Expression>> {
         match *self {
             $(
@@ -125,8 +121,8 @@ impl ParseInfix for $token_type {
                     // both Precedence and FromToken are defined above for this repeated clause,
                     // so unwraps are safe
                     let curr_precedence = self.precedence().unwrap();
-                    state.next().unwrap(); // advance tokens
-                    match parser.parse_expression(state, curr_precedence)? {
+                    parser.state.next().unwrap(); // advance tokens
+                    match parser.parse_expression(curr_precedence)? {
                         Some(right) => {
                             Ok(Some(Expression::Infix {
                                 op: InfixOp::from_token(&$infix_token).unwrap(),
@@ -153,53 +149,59 @@ impl Precedence for $token_type {
 
 type StatementFuncs = Vec<fn(&Parser, &mut ParserState) -> perrors::Result<Option<Statement>>>;
 type ExpressionFuncs = Vec<fn(&Parser, &mut ParserState) -> perrors::Result<Option<Expression>>>;
+type ParserState<'a> = std::iter::Peekable<std::slice::Iter<'a, $token_type>>;
 
-pub struct Parser {
-    statements: StatementFuncs,
+pub trait Parse {
+    fn parse(&self) -> perrors::Result<Program>;
 }
-impl Parser {
-    pub fn new() -> Parser {
-        let mut statements: StatementFuncs = Vec::new();
-        $(
-            statements.push(_parse_statement::$statement_name);
-        )*
+impl Parse for Vec<$token_type> {
+    fn parse(&self) -> perrors::Result<Program> {
+        Parser::new(self).parse()
+    }
+}
+
+pub struct Parser<'a> {
+    state: ParserState<'a>
+}
+impl<'a> Parser<'a> {
+    pub fn new(tokens: &'a Vec<$token_type>) -> Parser {
         Parser {
-            statements: statements,
+            state: tokens.iter().peekable(),
         }
     }
-    pub fn parse(&self, tokens: &Vec<$token_type>) -> perrors::Result<Program> {
-        let mut state = tokens.iter().peekable();
+    pub fn parse(&mut self) -> perrors::Result<Program> {
         let mut program = Program::new();
-        while state.peek().is_some() {
-            program.push(self.parse_statement(&mut state)?);
+        while self.state.peek().is_some() {
+            program.push(self.parse_statement()?);
         }
         Ok(program)
     }
 
-    fn parse_statement(&self, state: &mut ParserState) -> perrors::Result<Statement> {
-        debug_assert!(state.peek().is_some());
-        for statement_func in &self.statements {
-            match statement_func(self, state)? {
+    fn parse_statement(&mut self) -> perrors::Result<Statement> {
+        debug_assert!(self.state.peek().is_some());
+        $(
+            match _parse_statement::$statement_name(self)? {
                 Some(s) => {
                     return Ok(s);
                 },
-                None => { /* continue on to try next statement */ },
+                None => {
+                    // continue on to try next statement
+                }
             }
-        }
+        )*
         Err(perrors::ErrorKind::Parse("no statement found".to_string()))
     }
     fn parse_expression(
-        &self,
-        state: &mut ParserState,
+        &mut self,
         precedence: $precedence_type,
     ) -> perrors::Result<Option<Expression>> {
-        debug_assert!(state.peek().is_some());
+        debug_assert!(self.state.peek().is_some());
         // this clone is potentially very costly, but necessary to avoid mutiple
         // mutable borrow of state.
         // TODO: this can be avoided by restructuring the code a bit here (and
         // modifying how ParseInfix works)
-        let tok = state.next().unwrap().clone();
-        let prefix_opt = tok.parse_prefix(&self, state)?;
+        let tok = self.state.next().unwrap().clone();
+        let prefix_opt = tok.parse_prefix(self)?;
         if prefix_opt.is_none() {
             return Ok(None);
         }
@@ -209,18 +211,18 @@ impl Parser {
                 Ok(Some(prefix_opt.unwrap()))
             } else {
                 let mut left_expr = prefix_opt.unwrap();
-                while precedence < peek_precedence(state) {
+                while precedence < self.peek_precedence() {
                     // if no peek token, we can't get here (due to peek_precedence), so unwrap is ok
-                    debug_assert!(state.peek().is_some());
+                    debug_assert!(self.state.peek().is_some());
 
                     let infix_expr = {
                         // this clone is potentially very costly, but necessary to avoid mutiple
                         // mutable borrow of state.
                         // TODO: this can be avoided by restructuring the code a bit here (and
                         // modifying how ParseInfix works)
-                        let peek_tok = state.peek().unwrap().clone();
+                        let peek_tok = self.state.peek().unwrap().clone();
                         // parse_infix is guaranteed to either advance tokens, or return None
-                        let infix = peek_tok.parse_infix(left_expr.clone(), &self, state)?;
+                        let infix = peek_tok.parse_infix(left_expr.clone(), self)?;
                         if infix.is_none() {
                             return Ok(Some(left_expr));
                         }
@@ -232,22 +234,26 @@ impl Parser {
             }
         )
     }
-    fn parse_grouped_expression(
-        &self,
-        state: &mut ParserState,
-    ) -> perrors::Result<Option<Expression>> {
-        let expr = self.parse_expression(state, <$precedence_type>::lowest())?;
-        self.expect_peek_token(state, &$group_token_end)?;
+    fn peek_precedence(&mut self) -> $precedence_type {
+        // get the precedence of the next token (lowest if no token exists)
+        if let Some(&&ref peek_tok) = self.state.peek() {
+            match peek_tok.precedence() {
+                Some(prec) => prec,
+                None => <$precedence_type>::lowest(),
+            }
+        } else {
+            <$precedence_type>::lowest()
+        }
+    }
+    fn parse_grouped_expression(&mut self) -> perrors::Result<Option<Expression>> {
+        let expr = self.parse_expression(<$precedence_type>::lowest())?;
+        self.expect_peek_token(&$group_token_end)?;
         // consume group end token
-        state.next().unwrap();
+        self.state.next().unwrap();
         Ok(expr)
     }
-    fn expect_peek_token(
-        &self,
-        state: &mut ParserState,
-        tok: &$token_type
-    ) -> perrors::Result<()> {
-        if let Some(&&ref peek_tok) = state.peek() {
+    fn expect_peek_token(&mut self, tok: &$token_type) -> perrors::Result<()> {
+        if let Some(&&ref peek_tok) = self.state.peek() {
             if peek_tok == tok {
                 Ok(())
             } else {
@@ -260,37 +266,14 @@ impl Parser {
     }
 }
 
-pub type ParserState<'a> = std::iter::Peekable<std::slice::Iter<'a, $token_type>>;
-fn peek_precedence(state: &mut ParserState) -> $precedence_type {
-    // get the precedence of the next token (lowest if no token exists)
-    // state.peek().and_then(|&pt| pt.precedence()).unwrap_or(P::lowest())
-    if let Some(&&ref peek_tok) = state.peek() {
-        match peek_tok.precedence() {
-            Some(prec) => prec,
-            None => <$precedence_type>::lowest(),
-        }
-    } else {
-        <$precedence_type>::lowest()
-    }
-}
-// pub struct ParserState<'a> {
-//     iter: std::iter::Peekable<std::slice::Iter<'a, Token>>
-// }
-// impl<'a> ParserState<'a> {
-
-// }
-
 mod _parse_statement {
     #[allow(unused_imports)]
     use super::*;
 
     $(
         #[allow(non_snake_case)]
-        pub fn $statement_name(
-            parser: &Parser,
-            state: &mut ParserState
-        ) -> perrors::Result<Option<Statement>> {
-            statement_body!(parser, state, $precedence_type; $($statement_tt)*);
+        pub fn $statement_name(parser: &mut Parser) -> perrors::Result<Option<Statement>> {
+            statement_body!(parser, $precedence_type; $($statement_tt)*);
             // there were enough tokens, and they all matched!
             Ok(Some(Statement::$statement_name(statement_binds!($($statement_tt)*))))
         }
@@ -336,12 +319,10 @@ mod simple_calc {
 
     #[test]
     fn test_simple_calc() {
-        let lexer = Lexer::new();
-        let tokens = lexer.lex("5 * (9 + 2)").unwrap().iter()
+        let tokens: Vec<Token> = "5 * (9 + 2)".lex().unwrap().iter()
             .map(|span| span.token.clone()).collect();
         println!("{:?}", tokens);
-        let parser = Parser::new();
-        let ast = parser.parse(&tokens);
+        let ast = tokens.parse();
         println!("{:?}", ast);
 
     }
@@ -378,12 +359,10 @@ mod statements {
 
     #[test]
     fn test_statement() {
-        let lexer = Lexer::new();
-        let tokens = lexer.lex("add 5 to 9").unwrap().iter()
+        let tokens: Vec<Token> = "add 5 to 9".lex().unwrap().iter()
             .map(|span| span.token.clone()).collect();
         println!("{:?}", tokens);
-        let parser = Parser::new();
-        let ast = parser.parse(&tokens);
+        let ast = tokens.parse();
         println!("{:?}", ast);
     }
 }
