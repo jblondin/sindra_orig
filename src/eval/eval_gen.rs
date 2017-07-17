@@ -114,7 +114,6 @@ mod simple_calc {
     evaluator![
         program_type: Program,
         block_type: Block,
-        // statement_type: Statement,
         identifier_type: String,
         values: [
             Integer(i64)

@@ -41,7 +41,6 @@ parser![
 evaluator![
     program_type: Program,
     block_type: Block,
-    // statement_type: Statement,
     identifier_type: String,
     values: [
         Float(f64)
