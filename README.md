@@ -7,7 +7,7 @@ assist in quickly developing new programming languages. It is composed of a set 
 expand into the lexer, parser, and evaluator components of a typical compiler pipeline.
 
 Sindra currently just consists of a (very limited) lexer generator and parser generator. A
-tree-walking evaluator which can produces an REPL and an interpreter is currently under development.
-At some point in the future, there will ideally also be a compiler.
+recusrive tree-walking evaluator which can produce an REPL and an interpreter is currently under
+development. At some point in the future, there will ideally also be a compiler.
 
 Additional tests, examples and documentation will be forthcoming.
