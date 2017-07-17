@@ -287,8 +287,8 @@ mod basic {
     use lex::rules::{PTN_FLOAT, convert_float};
 
     lexer![
-        r"\+" => Plus,
-        r"\+=" => PlusEqual,
+        r"\+"                               => Plus,
+        r"\+="                              => PlusEqual,
         r"-"                                => Minus,
         r"-="                               => MinusEqual,
         r"="                                => Equal,

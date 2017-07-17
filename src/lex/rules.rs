@@ -12,26 +12,32 @@ fn remove_underscores(input: &str) -> String {
 }
 
 // floating-point numbers
-pub const PTN_FLOAT: &str = r"(?x)
-    (?:[_0-9]+\.(?:[_0-9]+(?:[eE][\+-]?[_0-9]+)?)?) # with period, optional exponent
-    |                                               # or
-    (?:[_0-9]+[eE][\+-]?[_0-9]+)                    # no period, mandatory exponent
-";
+macro_rules! float_pattern {
+    () => ( r"(?x)
+        (?:[_0-9]+\.(?:[_0-9]+(?:[eE][\+-]?[_0-9]+)?)?) # with period, optional exponent
+        |                                               # or
+        (?:[_0-9]+[eE][\+-]?[_0-9]+)                    # no period, mandatory exponent
+    " );
+}
+pub const PTN_FLOAT: &str = float_pattern!();
 pub fn convert_float(whole: &str, _: &Captures) -> Result<f64> {
     let underscores_removed = remove_underscores(whole);
     underscores_removed.parse::<f64>().map_err(|e| ErrorKind::ConvertFloatError(e))
 }
 
 // integers (including hex / oct / bin representations)
-pub const PTN_INT: &str = r"(?x)
-    0x(?P<hex>[_0-9A-Fa-f]+)   # hexadecimal
-    |                          # or
-    0o(?P<oct>[_0-8]+)         # octal
-    |                          # or
-    0b(?P<bin>[_0-1]+)         # binary
-    |                          # or
-    (?P<dec>[0-9][_0-9]*)      # decimal
-";
+macro_rules! int_pattern {
+    () => ( r"(?x)
+        0x(?P<hex>[_0-9A-Fa-f]+)   # hexadecimal
+        |                          # or
+        0o(?P<oct>[_0-8]+)         # octal
+        |                          # or
+        0b(?P<bin>[_0-1]+)         # binary
+        |                          # or
+        (?P<dec>[0-9][_0-9]*)      # decimal
+    " );
+}
+pub const PTN_INT: &str = int_pattern!();
 pub fn convert_int(whole: &str, captures: &Captures) -> Result<i64> {
     if let Some(mat) = captures.name("dec") {
         i64::from_str_radix(remove_underscores(mat.as_str()).as_str(), 10)
@@ -47,6 +53,19 @@ pub fn convert_int(whole: &str, captures: &Captures) -> Result<i64> {
             .map_err(|e| ErrorKind::ConvertIntError(e))
     } else {
         Err(ErrorKind::ConvertStr(format!("string '{}' did not parse as integer", whole)))
+    }
+}
+
+pub const PTN_NUM: &str = concat!(
+    "(?P<float>", float_pattern!(), ")|(?P<int>", int_pattern!(), ")"
+);
+pub fn convert_num(whole: &str, captures: &Captures) -> Result<f64> {
+    if let Some(_) = captures.name("float") {
+        convert_float(whole, captures)
+    } else if let Some(_) = captures.name("int") {
+        convert_int(whole, captures).map(|i| i as f64)
+    } else {
+        Err(ErrorKind::ConvertStr(format!("string '{}' did not parse as number", whole)))
     }
 }
 
