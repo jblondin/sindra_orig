@@ -15,16 +15,14 @@ macro_rules! parser {
         literals: [
             $($literal_token:path => $literal_name:ident<$literal_type:ty>,)*
         ],
-        prefix: [
+        precedence_type: $precedence_type:ty,
+        prefix<$prefix_precedence:path>: [
             $($prefix_token:path => $prefix_name:ident,)*
         ],
-        infix<$precedence_type:ty>: [
+        infix: [
             $($infix_token:path => $infix_name:ident => $infix_precedence:expr,)*
         ]
     ) => (
-
-
-use std;
 
 use $crate::parse::errors as perrors;
 
@@ -62,6 +60,23 @@ pub enum Expression {
         left: Box<Expression>,
         right: Box<Expression>
     },
+    Prefix {
+        op: PrefixOp,
+        right: Box<Expression>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PrefixOp {
+    $($prefix_name,)*
+}
+impl FromToken<$token_type> for PrefixOp {
+    fn from_token(tok: &$token_type) -> Option<PrefixOp> {
+        match *tok {
+            $($prefix_token => Some(PrefixOp::$prefix_name),)*
+            _ => None
+        }
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -87,8 +102,7 @@ impl FromToken<$token_type> for InfixOp {
 }
 
 pub trait ParsePrefix{
-    fn parse_prefix(&self, parser: &mut Parser)
-        -> perrors::Result<Option<Expression>>;
+    fn parse_prefix(&self, parser: &mut Parser) -> perrors::Result<Option<Expression>>;
 }
 impl ParsePrefix for $token_type {
     fn parse_prefix(&self, parser: &mut Parser) -> perrors::Result<Option<Expression>> {
@@ -100,6 +114,21 @@ impl ParsePrefix for $token_type {
                     Literal::from_token(&$literal_token(value)).unwrap()))),
             )*
             $group_token_start => Ok(parser.parse_grouped_expression()?),
+            $(
+                $prefix_token => {
+                    //FIXME: I think this will break on a input-ending unary prefix operator
+                    match parser.parse_expression($prefix_precedence)? {
+                        Some(right) => {
+                            // FromToken is always defined at this repetition level, unwrap is safe
+                            Ok(Some(Expression::Prefix {
+                                op: PrefixOp::from_token(&$prefix_token).unwrap(),
+                                right: Box::new(right),
+                            }))
+                        },
+                        None => Ok(None),
+                    }
+                },
+            )*
             _ => Ok(None)
         }
     }
@@ -147,9 +176,7 @@ impl Precedence for $token_type {
     }
 }
 
-type StatementFuncs = Vec<fn(&Parser, &mut ParserState) -> perrors::Result<Option<Statement>>>;
-type ExpressionFuncs = Vec<fn(&Parser, &mut ParserState) -> perrors::Result<Option<Expression>>>;
-type ParserState<'a> = std::iter::Peekable<std::slice::Iter<'a, $token_type>>;
+type ParserState<'a> = ::std::iter::Peekable<::std::slice::Iter<'a, $token_type>>;
 
 pub trait Parse {
     fn parse(&self) -> perrors::Result<Program>;
@@ -309,8 +336,9 @@ mod simple_calc {
         literals: [
             Token::IntLiteral => Integer<i64>,
         ],
-        prefix: [],
-        infix<StandardPrecedence>: [
+        precedence_type: StandardPrecedence,
+        prefix<StandardPrecedence::Prefix>: [],
+        infix: [
             Token::Asterisk => Multiply   => StandardPrecedence::Product,
             Token::Plus     => Add        => StandardPrecedence::Sum,
         ]
@@ -353,8 +381,9 @@ mod statements {
         literals: [
             Token::IntLiteral => Integer<i64>,
         ],
-        prefix: [],
-        infix<StandardPrecedence>: []
+        precedence_type: StandardPrecedence,
+        prefix<StandardPrecedence::Prefix>: [],
+        infix: []
     ];
 
     #[test]

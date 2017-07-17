@@ -11,8 +11,10 @@ pub enum StandardPrecedence {
     LessGreater     = 3,
     Sum             = 4,
     Product         = 5,
-    Call            = 6,
-    Index           = 7,
+    Power           = 6,
+    Prefix          = 7,
+    Call            = 8,
+    Index           = 9,
 }
 impl Lowest for StandardPrecedence {
     fn lowest() -> StandardPrecedence {
