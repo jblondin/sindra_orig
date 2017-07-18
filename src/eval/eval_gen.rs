@@ -35,6 +35,7 @@ impl Eval for $program_type {
 }
 
 pub struct Evaluator {
+    #[allow(dead_code)]
     context: Context<$ident_type, Value>,
 }
 
