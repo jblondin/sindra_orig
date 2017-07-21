@@ -33,24 +33,24 @@ macro_rules! statement_binds {
 #[macro_export]
 macro_rules! statement_args {
     (_cont identifier<$ident_name:ident>) => (
-        pspan::Spanned<'a, Identifier>
+        Spanned<'a, Identifier>
     );
     (_cont expression<$expr_name:ident>) => (
-        pspan::Spanned<'a, Expression<'a>>
+        Spanned<'a, Expression<'a>>
     );
     (_cont identifier<$ident_name:ident>, $($statement_arg_tt:tt)*) => (
-        pspan::Spanned<'a, Identifier>, statement_args!(_cont $($statement_arg_tt)*)
+        Spanned<'a, Identifier>, statement_args!(_cont $($statement_arg_tt)*)
     );
     (_cont expression<$expr_name:ident>, $($statement_arg_tt:tt)*) => (
-        pspan::Spanned<'a, Expression<'a>>, statement_args!(_cont $($statement_arg_tt)*)
+        Spanned<'a, Expression<'a>>, statement_args!(_cont $($statement_arg_tt)*)
     );
-    (identifier<$ident_name:ident>) => ((pspan::Spanned<'a, Identifier>));
-    (expression<$expr_name:ident>) => ((pspan::Spanned<'a, Expression<'a>>));
+    (identifier<$ident_name:ident>) => ((Spanned<'a, Identifier>));
+    (expression<$expr_name:ident>) => ((Spanned<'a, Expression<'a>>));
     (identifier<$ident_name:ident>, $($statement_arg_tt:tt)*) => (
-        (pspan::Spanned<'a, Identifier>, statement_args!(_cont $($statement_arg_tt)*))
+        (Spanned<'a, Identifier>, statement_args!(_cont $($statement_arg_tt)*))
     );
     (expression<$expr_name:ident>, $($statement_arg_tt:tt)*) => (
-        (pspan::Spanned<'a, Expression<'a>>, statement_args!(_cont $($statement_arg_tt)*))
+        (Spanned<'a, Expression<'a>>, statement_args!(_cont $($statement_arg_tt)*))
     );
 }
 

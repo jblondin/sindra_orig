@@ -1,55 +1,69 @@
 #[macro_use] extern crate sindra;
 extern crate regex;
 
-use sindra::parse::precedence::StandardPrecedence;
-use sindra::lex::rules::{PTN_NUM, convert_num};
+mod lexer {
+    use sindra::lex::rules::{PTN_NUM, convert_num};
+
+    lexer![
+        r"\("                                   => LParen,
+        r"\)"                                   => RParen,
+        r"\+"                                   => Plus,
+        r"-"                                    => Minus,
+        r"/"                                    => Slash,
+        r"\*"                                   => Asterisk,
+        r"\^"                                   => Caret,
+        PTN_NUM         => convert_num          => NumLiteral<f64>,
+    ];
+}
+
+mod parser {
+    use super::lexer::Token;
+    use sindra::parse::precedence::StandardPrecedence;
+
+    parser![
+        token_type: Token,
+        group_tokens: (Token::LParen, Token::RParen),
+        statements: [
+            ExpressionStmt(expression<value>) := {expression<value>}
+        ],
+        literals: [
+            Token::NumLiteral => Float<f64>,
+        ],
+        precedence_type: StandardPrecedence,
+        prefix<StandardPrecedence::Prefix>: [
+            Token::Plus     => Plus,
+            Token::Minus    => Minus,
+        ],
+        infix: [
+            Token::Plus     => Add        => StandardPrecedence::Sum,
+            Token::Minus    => Subtract   => StandardPrecedence::Sum,
+            Token::Asterisk => Multiply   => StandardPrecedence::Product,
+            Token::Slash    => Divide     => StandardPrecedence::Product,
+            Token::Caret    => Power      => StandardPrecedence::Power,
+        ]
+    ];
+}
+
+mod evaluator {
+    use super::parser::{Program, Block, Statement};
+    use super::eval_expression;
+
+    evaluator![
+        program_type: Program,
+        block_type: Block,
+        identifier_type: String,
+        values: [
+            Float(f64)
+        ],
+        eval_statement: [
+            Statement::ExpressionStmt((expr)) => eval_expression((expr))
+        ]
+    ];
+}
+
 use sindra::span::Spanned;
-
-lexer![
-    r"\("                                   => LParen,
-    r"\)"                                   => RParen,
-    r"\+"                                   => Plus,
-    r"-"                                    => Minus,
-    r"/"                                    => Slash,
-    r"\*"                                   => Asterisk,
-    r"\^"                                   => Caret,
-    PTN_NUM         => convert_num          => NumLiteral<f64>,
-];
-
-parser![
-    token_type: Token,
-    group_tokens: (Token::LParen, Token::RParen),
-    statements: [
-        ExpressionStmt(expression<value>) := {expression<value>}
-    ],
-    literals: [
-        Token::NumLiteral => Float<f64>,
-    ],
-    precedence_type: StandardPrecedence,
-    prefix<StandardPrecedence::Prefix>: [
-        Token::Plus     => Plus,
-        Token::Minus    => Minus,
-    ],
-    infix: [
-        Token::Plus     => Add        => StandardPrecedence::Sum,
-        Token::Minus    => Subtract   => StandardPrecedence::Sum,
-        Token::Asterisk => Multiply   => StandardPrecedence::Product,
-        Token::Slash    => Divide     => StandardPrecedence::Product,
-        Token::Caret    => Power      => StandardPrecedence::Power,
-    ]
-];
-
-evaluator![
-    program_type: Program,
-    block_type: Block,
-    identifier_type: String,
-    values: [
-        Float(f64)
-    ],
-    eval_statement: [
-        Statement::ExpressionStmt((expr)) => eval_expression((expr))
-    ]
-];
+use self::parser::{Expression, Literal, InfixOp, PrefixOp};
+use self::evaluator::{Evaluator, Value};
 
 fn eval_expression(expr: (Spanned<Expression>), evaluator: &mut Evaluator) -> Value {
     match expr.item {
@@ -136,7 +150,7 @@ fn posate_value(right: Value) -> Value {
 }
 
 fn assert_value_matches(s: &str, expected: Value) {
-    let value = eval(parse(&lex(s).unwrap()).unwrap()).unwrap();
+    let value = evaluator::eval(parser::parse(&lexer::lex(s).unwrap()).unwrap()).unwrap();
     assert_eq!(value, expected);
 }
 

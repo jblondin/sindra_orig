@@ -1,8 +1,8 @@
 #[macro_export]
 macro_rules! repl {
     (
-        lexer: $lexer_type:ty,
-        parser: $parser_type:ty,
+        lexer: $lexer_func:expr,
+        parser: $parser_func:expr,
         evaluator: $evaluator_type:ty
     ) => (
 
@@ -25,7 +25,7 @@ struct Repl<W, E> {
     pub print_ast: bool,
     pub print_value: bool,
 
-    evaluator: Evaluator,
+    evaluator: $evaluator_type,
 }
 
 const HISTORY_FILE: &str = "repl_history.txt";
@@ -58,7 +58,7 @@ impl<W, E> Repl<W, E> where W: Write, E: Write {
             print_ast: false,
             print_value: true,
 
-            evaluator: Evaluator::new(),
+            evaluator: <$evaluator_type>::new(),
         }
     }
 
@@ -115,7 +115,7 @@ impl<W, E> Repl<W, E> where W: Write, E: Write {
 
 
     fn read_eval_print(&mut self, input: String) -> Result {
-        match lex(&input) {
+        match $lexer_func(&input) {
             Ok(tokenspans) => {
                 if self.print_tokens {
                     for token in &tokenspans {
@@ -123,7 +123,7 @@ impl<W, E> Repl<W, E> where W: Write, E: Write {
                             STDOUT_ERRSTR, e))?;
                     }
                 }
-                match parse(&tokenspans) {
+                match $parser_func(&tokenspans) {
                     Ok(program) => {
                         if self.print_ast {
                             writeln!(self.cout, "{:?}", program).map_err(|e| format!("{}: {}",

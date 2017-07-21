@@ -23,8 +23,8 @@ macro_rules! parser {
         ]
     ) => (
 
-use $crate::errors as perr;
-use $crate::span as pspan;
+use $crate::errors;
+use $crate::span::Spanned;
 
 use $crate::parse::precedence::Lowest;
 // use $crate::parse::from_token::FromToken;
@@ -39,7 +39,7 @@ pub trait FromToken<T>: Sized {
     fn from_token(tok: &T) -> Option<Self>;
 }
 
-type SpannedToken<'a> = pspan::Spanned<'a, $token_type>;
+type SpannedToken<'a> = Spanned<'a, $token_type>;
 
 pub type Program<'a> = Block<'a>;
 pub type Block<'a> = Vec<SpannedStatement<'a>>;
@@ -50,7 +50,7 @@ pub enum Statement<'a> {
         $statement_name(statement_args!($($statement_args_tt)*))
     ),*
 }
-type SpannedStatement<'a> = pspan::Spanned<'a, Statement<'a>>;
+type SpannedStatement<'a> = Spanned<'a, Statement<'a>>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
@@ -78,7 +78,7 @@ pub enum Expression<'a> {
         right: Box<SpannedExpr<'a>>,
     },
 }
-type SpannedExpr<'a> = pspan::Spanned<'a, Expression<'a>>;
+type SpannedExpr<'a> = Spanned<'a, Expression<'a>>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PrefixOp {
@@ -125,7 +125,7 @@ impl<'a> Precedence for SpannedToken<'a> {
 
 type ParserState<'a> = ::std::iter::Peekable<::std::slice::Iter<'a, SpannedToken<'a>>>;
 
-pub fn parse<'a>(tokens: &'a Vec<SpannedToken<'a>>) -> perr::Result<'a, Program<'a>> {
+pub fn parse<'a>(tokens: &'a Vec<SpannedToken<'a>>) -> errors::Result<'a, Program<'a>> {
     let mut state = tokens.iter().peekable();
     let mut program: Program = Program::new();
     while state.peek().is_some() {
@@ -134,7 +134,7 @@ pub fn parse<'a>(tokens: &'a Vec<SpannedToken<'a>>) -> perr::Result<'a, Program<
     Ok(program)
 }
 
-fn parse_statement<'a>(state: &mut ParserState<'a>) -> perr::Result<'a, SpannedStatement<'a>> {
+fn parse_statement<'a>(state: &mut ParserState<'a>) -> errors::Result<'a, SpannedStatement<'a>> {
     debug_assert!(state.peek().is_some());
     $(
         match _parse_statement::$statement_name(state)? {
@@ -146,13 +146,13 @@ fn parse_statement<'a>(state: &mut ParserState<'a>) -> perr::Result<'a, SpannedS
             }
         }
     )*
-    Err(perr::Error::nospan(perr::ErrorKind::Parse("no statement found".to_string())))
+    Err(errors::Error::nospan(errors::ErrorKind::Parse("no statement found".to_string())))
 }
 
 fn parse_expression<'a>(
     state: &mut ParserState<'a>,
     precedence: $precedence_type,
-) -> perr::ResOpt<'a, SpannedExpr<'a>> {
+) -> errors::ResOpt<'a, SpannedExpr<'a>> {
     debug_assert!(state.peek().is_some());
     let prefix_opt = parse_prefix(state)?;
     if prefix_opt.is_none() {
@@ -168,7 +168,7 @@ fn parse_expression<'a>(
                 let infix_expr = match parse_infix(state)? {
                     Some((op, right_expr)) => {
                         let left_span = left_expr.span;
-                        pspan::Spanned::new(
+                        Spanned::new(
                             Expression::Infix {
                                 op: op,
                                 left: Box::new(left_expr),
@@ -200,7 +200,7 @@ fn peek_precedence<'a>(state: &mut ParserState<'a>) -> $precedence_type {
     }
 }
 
-fn parse_grouped_expression<'a>(state: &mut ParserState<'a>) -> perr::ResOpt<'a, SpannedExpr<'a>> {
+fn parse_grouped_expression<'a>(state: &mut ParserState<'a>) -> errors::ResOpt<'a, SpannedExpr<'a>> {
     let expr = parse_expression(state, <$precedence_type>::lowest())?;
     expect_peek_token(state, &$group_token_end)?;
     // consume group end token
@@ -211,32 +211,32 @@ fn parse_grouped_expression<'a>(state: &mut ParserState<'a>) -> perr::ResOpt<'a,
 fn expect_peek_token<'a>(
     state: &mut ParserState<'a>,
     expected: &$token_type
-) -> perr::Result<'a, ()> {
+) -> errors::Result<'a, ()> {
     if let Some(&&ref peek_tok) = state.peek() {
         if peek_tok.spans_item(expected) {
             Ok(())
         } else {
-            Err(perr::Error::spanned(
-                perr::ErrorKind::Parse(format!("expected token {}, found token {}", expected,
+            Err(errors::Error::spanned(
+                errors::ErrorKind::Parse(format!("expected token {}, found token {}", expected,
                     peek_tok.item)),
                 peek_tok.span
             ))
         }
     } else {
-        Err(perr::Error::nospan(
-            perr::ErrorKind::Parse(format!("expected token {} at end of input", expected))
+        Err(errors::Error::nospan(
+            errors::ErrorKind::Parse(format!("expected token {} at end of input", expected))
         ))
     }
 }
 
-fn parse_prefix<'a>(state: &mut ParserState<'a>) -> perr::ResOpt<'a, SpannedExpr<'a>> {
+fn parse_prefix<'a>(state: &mut ParserState<'a>) -> errors::ResOpt<'a, SpannedExpr<'a>> {
     debug_assert!(state.peek().is_some());
-    let &pspan::Spanned { span, item: ref token } = state.next().unwrap();
+    let &Spanned { span, item: ref token } = state.next().unwrap();
     match *token {
         // add all the literals as prefixes
         $(
             // from_token always returns Some(_) for Literals, unwrap is safe
-            $literal_token(value) => Ok(Some(pspan::Spanned::new(Expression::Literal(
+            $literal_token(value) => Ok(Some(Spanned::new(Expression::Literal(
                 Literal::from_token(&$literal_token(value)).unwrap()), span))),
         )*
         $group_token_start => Ok(parse_grouped_expression(state)?),
@@ -246,7 +246,7 @@ fn parse_prefix<'a>(state: &mut ParserState<'a>) -> perr::ResOpt<'a, SpannedExpr
                 match parse_expression(state, $prefix_precedence)? {
                     Some(right) => {
                         // FromToken is always defined at this repetition level, unwrap is safe
-                        Ok(Some(pspan::Spanned::new(
+                        Ok(Some(Spanned::new(
                             Expression::Prefix {
                                 op: PrefixOp::from_token(&$prefix_token).unwrap(),
                                 right: Box::new(right),
@@ -261,7 +261,7 @@ fn parse_prefix<'a>(state: &mut ParserState<'a>) -> perr::ResOpt<'a, SpannedExpr
         _ => Ok(None)
     }
 }
-fn parse_infix<'a>(state: &mut ParserState<'a>) -> perr::ResOpt<'a, (InfixOp, SpannedExpr<'a>)> {
+fn parse_infix<'a>(state: &mut ParserState<'a>) -> errors::ResOpt<'a, (InfixOp, SpannedExpr<'a>)> {
     // if no peek token, we can't get here (due to peek_precedence), so unwrap is ok
     debug_assert!(state.peek().is_some());
     let &&ref spanned_tok = state.peek().unwrap();
@@ -287,11 +287,11 @@ mod _parse_statement {
     $(
         #[allow(non_snake_case)]
         pub fn $statement_name<'a>(state: &mut ParserState<'a>)
-                -> perr::ResOpt<'a, pspan::Spanned<'a, Statement<'a>>> {
-            if let Some(&&pspan::Spanned { span: start_span, .. }) = state.peek() {
+                -> errors::ResOpt<'a, Spanned<'a, Statement<'a>>> {
+            if let Some(&&Spanned { span: start_span, .. }) = state.peek() {
                 statement_body!(state, $precedence_type; $($statement_tt)*);
                 // there were enough tokens, and they all matched!
-                Ok(Some(pspan::Spanned::new(
+                Ok(Some(Spanned::new(
                     Statement::$statement_name(statement_binds!($($statement_tt)*)),
                     start_span
                 )))
@@ -310,41 +310,48 @@ mod _parse_statement {
 #[allow(dead_code)]
 mod simple_calc {
 
+
+    mod lexer {
+        use lex::rules::{PTN_INT, convert_int};
+
+        lexer![
+            r"\("                                   => LParen,
+            r"\)"                                   => RParen,
+            r"\+"                                   => Plus,
+            r"\*"                                   => Asterisk,
+            PTN_INT         => convert_int          => IntLiteral<i64>,
+        ];
+    }
+
+    mod parser {
+        use super::lexer::Token;
+        use parse::precedence::StandardPrecedence;
+
+        parser![
+            token_type: Token,
+            group_tokens: (Token::LParen, Token::RParen),
+            statements: [
+                ExpressionStmt(expression<value>) := {expression<value>}
+            ],
+            literals: [
+                Token::IntLiteral => Integer<i64>,
+            ],
+            precedence_type: StandardPrecedence,
+            prefix<StandardPrecedence::Prefix>: [],
+            infix: [
+                Token::Asterisk => Multiply   => StandardPrecedence::Product,
+                Token::Plus     => Add        => StandardPrecedence::Sum,
+            ]
+        ];
+    }
+
     use span::Spanned;
-    use lex::rules::{PTN_INT, convert_int};
-    use parse::precedence::StandardPrecedence;
-
-    lexer![
-        r"\("                                   => LParen,
-        r"\)"                                   => RParen,
-        r"\+"                                   => Plus,
-        r"\*"                                   => Asterisk,
-        PTN_INT         => convert_int          => IntLiteral<i64>,
-    ];
-
-    parser![
-        token_type: Token,
-        group_tokens: (Token::LParen, Token::RParen),
-        statements: [
-            ExpressionStmt(expression<value>) := {expression<value>}
-        ],
-        literals: [
-            Token::IntLiteral => Integer<i64>,
-        ],
-        precedence_type: StandardPrecedence,
-        prefix<StandardPrecedence::Prefix>: [],
-        infix: [
-            Token::Asterisk => Multiply   => StandardPrecedence::Product,
-            Token::Plus     => Add        => StandardPrecedence::Sum,
-        ]
-    ];
-
 
     #[test]
     fn test_simple_calc() {
-        let tokens: Vec<Spanned<Token>> = lex("5 * (9 + 2)").unwrap();
+        let tokens: Vec<Spanned<lexer::Token>> = lexer::lex("5 * (9 + 2)").unwrap();
         println!("{:?}", tokens);
-        let ast = parse(&tokens);
+        let ast = parser::parse(&tokens);
         println!("{:?}", ast);
 
     }
@@ -354,38 +361,45 @@ mod simple_calc {
 #[allow(dead_code, unused_variables)]
 mod statements {
 
+
+    mod lexer {
+        use lex::rules::{PTN_INT, convert_int};
+        lexer![
+            r"\("                                   => LParen,
+            r"\)"                                   => RParen,
+            r"add"                                  => Add,
+            r"to"                                   => To,
+            PTN_INT         => convert_int          => IntLiteral<i64>,
+        ];
+    }
+
+    mod parser {
+        use super::lexer::Token;
+        use parse::precedence::StandardPrecedence;
+
+        parser![
+            token_type: Token,
+            group_tokens: (Token::LParen, Token::RParen),
+            statements: [
+                OtherStmt(expression<value>, expression<operand>) :=
+                    {token<Token::Add> expression<value> token<Token::To> expression<operand>}
+            ],
+            literals: [
+                Token::IntLiteral => Integer<i64>,
+            ],
+            precedence_type: StandardPrecedence,
+            prefix<StandardPrecedence::Prefix>: [],
+            infix: []
+        ];
+    }
+
     use span::Spanned;
-    use parse::precedence::StandardPrecedence;
-    use lex::rules::{PTN_INT, convert_int};
-
-    lexer![
-        r"\("                                   => LParen,
-        r"\)"                                   => RParen,
-        r"add"                                  => Add,
-        r"to"                                   => To,
-        PTN_INT         => convert_int          => IntLiteral<i64>,
-    ];
-
-    parser![
-        token_type: Token,
-        group_tokens: (Token::LParen, Token::RParen),
-        statements: [
-            OtherStmt(expression<value>, expression<operand>) :=
-                {token<Token::Add> expression<value> token<Token::To> expression<operand>}
-        ],
-        literals: [
-            Token::IntLiteral => Integer<i64>,
-        ],
-        precedence_type: StandardPrecedence,
-        prefix<StandardPrecedence::Prefix>: [],
-        infix: []
-    ];
 
     #[test]
     fn test_statement() {
-        let tokens: Vec<Spanned<Token>> = lex("add 5 to 9").unwrap();
+        let tokens: Vec<Spanned<lexer::Token>> = lexer::lex("add 5 to 9").unwrap();
         println!("{:?}", tokens);
-        let ast = parse(&tokens);
+        let ast = parser::parse(&tokens);
         println!("{:?}", ast);
     }
 }

@@ -1,8 +1,8 @@
 #[macro_export]
 macro_rules! interp {
     (
-        lexer: $lexer_type:ty,
-        parser: $parser_type:ty,
+        lexer: $lex_func:expr,
+        parser: $parse_func:expr,
         evaluator: $evaluator_type:ty
     ) => (
 
@@ -23,7 +23,7 @@ struct Interpreter<W, E> {
     pub print_ast: bool,
     pub print_value: bool,
 
-    evaluator: Evaluator,
+    evaluator: $evaluator_type,
 }
 
 const STDOUT_ERRSTR: &str = "unable to write to stdout";
@@ -38,12 +38,12 @@ impl<W, E> Interpreter<W, E> where W: Write, E: Write {
             print_ast: false,
             print_value: true,
 
-            evaluator: Evaluator::new(),
+            evaluator: <$evaluator_type>::new(),
         }
     }
 
     pub fn process(&mut self, input: &str) -> Result {
-        match lex(input) {
+        match $lex_func(input) {
             Ok(tokenspans) => {
                 if self.print_tokens {
                     for token in &tokenspans {
@@ -51,7 +51,7 @@ impl<W, E> Interpreter<W, E> where W: Write, E: Write {
                             STDOUT_ERRSTR, e))?;
                     }
                 }
-                match parse(&tokenspans) {
+                match $parse_func(&tokenspans) {
                     Ok(program) => {
                         if self.print_ast {
                             writeln!(self.cout, "{:?}", program).map_err(|e| format!("{}: {}",

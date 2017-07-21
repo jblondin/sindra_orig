@@ -1,19 +1,19 @@
 #[macro_export]
 macro_rules! interp_repl {
     (
-        lexer: $lexer_type:ty,
-        parser: $parser_type:ty,
+        lexer: $lex_func:expr,
+        parser: $parse_func:expr,
         evaluator: $evaluator_type:ty
     ) => (
 
 mod interp {
     use super::*;
-    interp![lexer: $lexer_type, parser: $parser_type, evaluator: $evaluator_type];
+    interp![lexer: $lex_func, parser: $parse_func, evaluator: $evaluator_type];
 }
 
 mod repl {
     use super::*;
-    repl![lexer: $lexer_type, parser: $parser_type, evaluator: $evaluator_type];
+    repl![lexer: $lex_func, parser: $parse_func, evaluator: $evaluator_type];
 }
 
 use clap::{Arg, App, ArgGroup};

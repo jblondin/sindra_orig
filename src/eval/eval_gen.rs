@@ -13,8 +13,8 @@ macro_rules! evaluator {
         ]
     ) => (
 
-use $crate::errors as eerr;
-use $crate::span as espan;
+use $crate::errors;
+use $crate::span::Spanned;
 use $crate::eval::context::Context;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -23,7 +23,8 @@ pub enum Value {
     Empty
 }
 
-pub fn eval<'a>(program: $program_type<'a>) -> eerr::Result<'a, Value> {
+#[allow(dead_code)]
+pub fn eval<'a>(program: $program_type<'a>) -> errors::Result<'a, Value> {
     Evaluator::new().eval(program)
 }
 
@@ -39,7 +40,7 @@ impl Evaluator {
         }
     }
 
-    pub fn eval<'a>(&mut self, mut program: $program_type<'a>) -> eerr::Result<'a, Value> {
+    pub fn eval<'a>(&mut self, mut program: $program_type<'a>) -> errors::Result<'a, Value> {
         Ok(self.eval_block(&mut program))
     }
 
@@ -61,7 +62,7 @@ impl Evaluator {
         }
     }
 
-    pub fn eval_statement<'a>(&mut self, statement: espan::Spanned<'a, Statement>) -> Value {
+    pub fn eval_statement<'a>(&mut self, statement: Spanned<'a, Statement>) -> Value {
         match statement.item {
             $(
                 $stmt_type::$stmt_variant($($args)*) => $stmt_eval_func($($params),*, self),
@@ -76,56 +77,72 @@ impl Evaluator {
 #[cfg(test)]
 #[allow(dead_code)]
 mod simple_calc {
-    use span::Spanned;
-    use lex::rules::{PTN_INT, convert_int};
-    use parse::precedence::StandardPrecedence;
 
-    lexer![
-        r"\("                                   => LParen,
-        r"\)"                                   => RParen,
-        r"\+"                                   => Plus,
-        r"\*"                                   => Asterisk,
-        PTN_INT         => convert_int          => IntLiteral<i64>,
-    ];
+    mod lexer {
+        use lex::rules::{PTN_INT, convert_int};
 
-    parser![
-        token_type: Token,
-        group_tokens: (Token::LParen, Token::RParen),
-        statements: [
-            ExpressionStmt(expression<value>) := {expression<value>}
-        ],
-        literals: [
-            Token::IntLiteral => Integer<i64>,
-        ],
-        precedence_type: StandardPrecedence,
-        prefix<StandardPrecedence::Prefix>: [],
-        infix: [
-            Token::Asterisk => Multiply   => StandardPrecedence::Product,
-            Token::Plus     => Add        => StandardPrecedence::Sum,
-        ]
-    ];
+        lexer![
+            r"\("                                   => LParen,
+            r"\)"                                   => RParen,
+            r"\+"                                   => Plus,
+            r"\*"                                   => Asterisk,
+            PTN_INT         => convert_int          => IntLiteral<i64>,
+        ];
+    }
 
-    evaluator![
-        program_type: Program,
-        block_type: Block,
-        identifier_type: String,
-        values: [
-            Integer(i64)
-        ],
-        eval_statement: [
-            Statement::ExpressionStmt((expr)) => eval_expression((expr))
-        ]
-    ];
+    mod parser {
+        use super::lexer::Token;
+        use parse::precedence::StandardPrecedence;
+
+        parser![
+            token_type: Token,
+            group_tokens: (Token::LParen, Token::RParen),
+            statements: [
+                ExpressionStmt(expression<value>) := {expression<value>}
+            ],
+            literals: [
+                Token::IntLiteral => Integer<i64>,
+            ],
+            precedence_type: StandardPrecedence,
+            prefix<StandardPrecedence::Prefix>: [],
+            infix: [
+                Token::Asterisk => Multiply   => StandardPrecedence::Product,
+                Token::Plus     => Add        => StandardPrecedence::Sum,
+            ]
+        ];
+    }
+
+
+    mod evaluator {
+        use super::parser::{Program, Block, Statement};
+        use super::eval_expression;
+
+        evaluator![
+            program_type: Program,
+            block_type: Block,
+            identifier_type: String,
+            values: [
+                Integer(i64)
+            ],
+            eval_statement: [
+                Statement::ExpressionStmt((expr)) => eval_expression((expr))
+            ]
+        ];
+    }
 
     #[test]
     fn test_simple_calc() {
-        let tokens: Vec<Spanned<Token>> = lex("5 * (9 + 2)").unwrap();
+        let tokens: Vec<Spanned<lexer::Token>> = lexer::lex("5 * (9 + 2)").unwrap();
         println!("{:?}", tokens);
-        let ast = parse(&tokens).unwrap();
+        let ast = parser::parse(&tokens).unwrap();
         println!("{:?}", ast);
-        let value = eval(ast).unwrap();
+        let value = evaluator::eval(ast).unwrap();
         println!("{:?}", value);
     }
+
+    use span::Spanned;
+    use self::parser::{Expression, Literal, InfixOp};
+    use self::evaluator::{Evaluator, Value};
 
     fn eval_expression(expr: (Spanned<Expression>), evaluator: &mut Evaluator) -> Value {
         match expr.item {

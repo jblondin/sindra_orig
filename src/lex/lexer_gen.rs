@@ -9,9 +9,9 @@ use std::fmt;
 
 use regex::{Regex, RegexSet, Match, Captures};
 
-use $crate::errors as lerr;
+use $crate::errors;
 use $crate::lex::errors as lex_errors;
-use $crate::span as lspan;
+use $crate::span::{Spanned, Position, Offset, Span};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -68,7 +68,7 @@ impl RegexList {
     }
 }
 
-pub fn lex<'a>(input: &'a str) -> lerr::Result<'a, Vec<lspan::Spanned<'a, Token>>> {
+pub fn lex<'a>(input: &'a str) -> errors::Result<'a, Vec<Spanned<'a, Token>>> {
     Lexer::new(input).lex()
 }
 
@@ -85,7 +85,7 @@ impl<'a> Lexer<'a> {
             rules: vec![$(_token_funcs::$r_token::parse),*],
         }
     }
-    pub fn lex(&self) -> lerr::Result<'a, Vec<lspan::Spanned<'a, Token>>> {
+    pub fn lex(&self) -> errors::Result<'a, Vec<Spanned<'a, Token>>> {
         // compile the regexes twice, once for when we need to match individual regexes, and once
         // in the regex set (which processes all at once)
         // we also anchor each expression so it only matches the beginning of the input
@@ -99,7 +99,7 @@ impl<'a> Lexer<'a> {
             $(anchor_to_start($r_lexeme)),*
         ].iter()).unwrap();
 
-        let mut curr_pos = lspan::Position::start();
+        let mut curr_pos = Position::start();
         let mut tokens = vec![];
         let whitespace_devourer = Regex::new(r"^\s+").unwrap();
         let input_len = self.input.len();
@@ -108,7 +108,7 @@ impl<'a> Lexer<'a> {
             // eat some whitespace
             if let Some(mat) = whitespace_devourer.find(&self.input[curr_pos.byte..]) {
                 debug_assert_eq!(mat.start(), 0); // anchored at begining of line
-                curr_pos.offset(&lspan::Offset::from_str(mat.as_str()));
+                curr_pos.offset(&Offset::from_str(mat.as_str()));
                 if curr_pos.byte >= input_len {
                     break;
                 }
@@ -116,18 +116,18 @@ impl<'a> Lexer<'a> {
 
             // try to lex the next token
             let (token, matched) = self.lex_token(&self.input[curr_pos.byte..], &regex_list, &set)
-                .map_err(|lte| lerr::Error::spanned(lerr::ErrorKind::LexToken(lte),
-                    lspan::Span::new(self.input, curr_pos)))?;
-            let offset = lspan::Offset::from_str(matched);
+                .map_err(|lte| errors::Error::spanned(errors::ErrorKind::LexToken(lte),
+                    Span::new(self.input, curr_pos)))?;
+            let offset = Offset::from_str(matched);
             if offset.nbytes() == 0 {
-                return Err(lerr::Error::spanned(lerr::ErrorKind::Lex(
+                return Err(errors::Error::spanned(errors::ErrorKind::Lex(
                     "Regex error: 0-length string matched".to_string()),
-                    lspan::Span::new(self.input, curr_pos)));
+                    Span::new(self.input, curr_pos)));
             }
             let prev_pos = curr_pos;
             curr_pos.offset(&offset);
-            tokens.push(lspan::Spanned::new(token,
-                lspan::Span::new(&self.input[prev_pos.byte..curr_pos.byte], prev_pos)));
+            tokens.push(Spanned::new(token,
+                Span::new(&self.input[prev_pos.byte..curr_pos.byte], prev_pos)));
         }
         Ok(tokens)
     }
