@@ -40,6 +40,39 @@ impl<'a> std::error::Error for Error<'a> {
 }
 
 #[derive(Debug)]
+pub struct MultiError<'a> {
+    message: String,
+    errors: Vec<Error<'a>>,
+}
+impl<'a> MultiError<'a> {
+    pub fn new(message: String, errors: Vec<Error<'a>>) -> MultiError<'a> {
+        MultiError {
+            message: message,
+            errors: errors,
+        }
+    }
+}
+impl<'a> fmt::Display for MultiError<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}: ", (self as &std::error::Error).description())?;
+        for err in &self.errors {
+            match err.span {
+                Some(span) => write!(f, "\n{} at line {}, column {}: {}",
+                    (err as &std::error::Error).description(), span.pos.row, span.pos.column,
+                    err.origin)?,
+                None       => write!(f, "\n{} (unknown position): {}",
+                    (err as &std::error::Error).description(), err.origin)?,
+            }
+        }
+        Ok(())
+    }
+}
+impl<'a> std::error::Error for MultiError<'a> {
+    fn description(&self) -> &str { &self.message }
+    fn cause(&self) -> Option<&std::error::Error> { None }
+}
+
+#[derive(Debug)]
 pub enum ErrorKind<'a> {
     Lex(String),
     LexToken(lex::errors::Error<'a>),
@@ -75,5 +108,6 @@ impl<'a> std::error::Error for ErrorKind<'a> {
     }
 }
 
+pub type MultiResult<'a, T> = std::result::Result<T, MultiError<'a>>;
 pub type Result<'a, T> = std::result::Result<T, Error<'a>>;
-pub type ResOpt<'a, T> = std::result::Result<Option<T>, Error<'a>>;
+pub type ResOpt<'a, T> = Result<'a, Option<T>>;

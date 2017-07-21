@@ -68,8 +68,26 @@ impl RegexList {
     }
 }
 
-pub fn lex<'a>(input: &'a str) -> errors::Result<'a, Vec<Spanned<'a, Token>>> {
-    Lexer::new(input).lex()
+pub fn lex<'a>(input: &'a str) -> errors::MultiResult<'a, Vec<Spanned<'a, Token>>> {
+    match Lexer::new(input).lex() {
+        Ok(tokenspans) => {
+            let mut lex_errors = vec![];
+            for ts in &tokenspans {
+                if ts.spans_item(&Token::Unrecognized) {
+                    lex_errors.push(errors::Error::spanned(errors::ErrorKind::Lex(
+                        format!("unrecognized token: '{}'", ts.span.as_slice())
+                    ), ts.span));
+                }
+            }
+            if lex_errors.is_empty() {
+                Ok(tokenspans)
+            } else {
+                Err(errors::MultiError::new(format!("{} error(s) found", lex_errors.len()),
+                    lex_errors))
+            }
+        },
+        Err(e) => Err(errors::MultiError::new("lex error".to_string(), vec![e]))
+    }
 }
 
 pub struct Lexer<'a> {

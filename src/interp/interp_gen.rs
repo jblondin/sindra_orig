@@ -1,8 +1,8 @@
 #[macro_export]
 macro_rules! interp {
     (
-        lexer: $lex_func:expr,
-        parser: $parse_func:expr,
+        lexer: $lexer_func:expr,
+        parser: $parser_func:expr,
         evaluator: $evaluator_type:ty
     ) => (
 
@@ -42,44 +42,12 @@ impl<W, E> Interpreter<W, E> where W: Write, E: Write {
         }
     }
 
-    pub fn process(&mut self, input: &str) -> Result {
-        match $lex_func(input) {
-            Ok(tokenspans) => {
-                if self.print_tokens {
-                    for token in &tokenspans {
-                        writeln!(self.cout, "{:?}", token).map_err(|e| format!("{}: {}",
-                            STDOUT_ERRSTR, e))?;
-                    }
-                }
-                match $parse_func(&tokenspans) {
-                    Ok(program) => {
-                        if self.print_ast {
-                            writeln!(self.cout, "{:?}", program).map_err(|e| format!("{}: {}",
-                                STDOUT_ERRSTR, e))?;
-                        }
-                        let value = self.evaluator.eval(program);
-                        if self.print_value {
-                            writeln!(self.cout, "{:?}", value).map_err(|e| format!("{}: {}",
-                                STDOUT_ERRSTR, e))?;
-                        }
-                    },
-                    Err(e) => {
-                        writeln!(self.cout, "{}", e).map_err(|e| format!("{}: {}", STDOUT_ERRSTR,
-                            e))?
-                    }
-                }
-            },
-            Err(e) => {
-                writeln!(self.cout, "{}", e).map_err(|e| format!("{}: {}", STDOUT_ERRSTR, e))?;
-            }
-        }
-        Ok(())
-    }
+    impl_read_eval_print![$lexer_func, $parser_func, self];
 }
 
 pub fn interp_string(s: &str) {
     let (stdout, stderr) = (::std::io::stdout(), ::std::io::stderr());
-    let result = Interpreter::new(stdout.lock(), stderr.lock()).process(s);
+    let result = Interpreter::new(stdout.lock(), stderr.lock()).read_eval_print(s);
 
     match result {
         Ok(_) => { ::std::process::exit(0); },

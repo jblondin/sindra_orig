@@ -72,7 +72,7 @@ impl<W, E> Repl<W, E> where W: Write, E: Write {
                     if self.is_repl_command(&line) {
                         self.update_repl_config(&line)?;
                     } else {
-                        self.read_eval_print(line)?;
+                        self.read_eval_print(&line)?;
                     }
                 },
                 Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
@@ -113,40 +113,7 @@ impl<W, E> Repl<W, E> where W: Write, E: Write {
         Ok(())
     }
 
-
-    fn read_eval_print(&mut self, input: String) -> Result {
-        match $lexer_func(&input) {
-            Ok(tokenspans) => {
-                if self.print_tokens {
-                    for token in &tokenspans {
-                        writeln!(self.cout, "{:?}", token).map_err(|e| format!("{}: {}",
-                            STDOUT_ERRSTR, e))?;
-                    }
-                }
-                match $parser_func(&tokenspans) {
-                    Ok(program) => {
-                        if self.print_ast {
-                            writeln!(self.cout, "{:?}", program).map_err(|e| format!("{}: {}",
-                                STDOUT_ERRSTR, e))?;
-                        }
-                        let value = self.evaluator.eval(program);
-                        if self.print_value {
-                            writeln!(self.cout, "{:?}", value).map_err(|e| format!("{}: {}",
-                                STDOUT_ERRSTR, e))?;
-                        }
-                    },
-                    Err(e) => {
-                        writeln!(self.cout, "{}", e).map_err(|e| format!("{}: {}", STDOUT_ERRSTR,
-                            e))?
-                    }
-                }
-            },
-            Err(e) => {
-                writeln!(self.cout, "{}", e).map_err(|e| format!("{}: {}", STDOUT_ERRSTR, e))?;
-            }
-        }
-        Ok(())
-    }
+    impl_read_eval_print![$lexer_func, $parser_func, self];
 }
 
 pub fn start_repl(lang_name: &str, version: &str) {
