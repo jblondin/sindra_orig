@@ -1,5 +1,3 @@
-
-
 pub trait Lowest {
     fn lowest() -> Self;
 }
@@ -20,10 +18,4 @@ impl Lowest for StandardPrecedence {
     fn lowest() -> StandardPrecedence {
         StandardPrecedence::Lowest
     }
-}
-
-pub trait Precedence {
-    type OpPrecedence: Lowest;
-
-    fn precedence(&self) -> Option<Self::OpPrecedence>;
 }

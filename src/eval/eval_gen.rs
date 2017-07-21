@@ -1,11 +1,8 @@
-
-
 #[macro_export]
 macro_rules! evaluator {
     (
-        program_type: $program_type:ty,
-        block_type: $block_type:ty,
-        // statement_type: $stmt_type:ty,
+        program_type: $program_type:tt,
+        block_type: $block_type:tt,
         identifier_type: $ident_type:ty,
         values: [
             $($variant:ident($($variant_type:ty),*)),*
@@ -16,7 +13,8 @@ macro_rules! evaluator {
         ]
     ) => (
 
-use $crate::eval::errors as eval_errors;
+use $crate::errors as eerr;
+use $crate::span as espan;
 use $crate::eval::context::Context;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -25,13 +23,8 @@ pub enum Value {
     Empty
 }
 
-pub trait Eval {
-    fn eval(self) -> eval_errors::Result<Value>;
-}
-impl Eval for $program_type {
-    fn eval(self) -> eval_errors::Result<Value> {
-        Evaluator::new().eval(self)
-    }
+pub fn eval<'a>(program: $program_type<'a>) -> eerr::Result<'a, Value> {
+    Evaluator::new().eval(program)
 }
 
 pub struct Evaluator {
@@ -46,16 +39,16 @@ impl Evaluator {
         }
     }
 
-    pub fn eval(&mut self, mut program: $program_type) -> eval_errors::Result<Value> {
+    pub fn eval<'a>(&mut self, mut program: $program_type<'a>) -> eerr::Result<'a, Value> {
         Ok(self.eval_block(&mut program))
     }
 
-    pub fn eval_block(&mut self, block: &mut $block_type) -> Value {
+    pub fn eval_block<'a>(&mut self, block: &mut $block_type<'a>) -> Value {
         block.reverse();
         self.eval_reversed_block(block)
     }
 
-    pub fn eval_reversed_block(&mut self, block: &mut $block_type) -> Value {
+    pub fn eval_reversed_block<'a>(&mut self, block: &mut $block_type<'a>) -> Value {
         if let Some(first) = block.pop() {
             let value = self.eval_statement(first);
             if block.is_empty() {
@@ -68,8 +61,8 @@ impl Evaluator {
         }
     }
 
-    pub fn eval_statement(&mut self, statement: Statement) -> Value {
-        match statement {
+    pub fn eval_statement<'a>(&mut self, statement: espan::Spanned<'a, Statement>) -> Value {
+        match statement.item {
             $(
                 $stmt_type::$stmt_variant($($args)*) => $stmt_eval_func($($params),*, self),
             )*
@@ -83,8 +76,8 @@ impl Evaluator {
 #[cfg(test)]
 #[allow(dead_code)]
 mod simple_calc {
+    use span::Spanned;
     use lex::rules::{PTN_INT, convert_int};
-
     use parse::precedence::StandardPrecedence;
 
     lexer![
@@ -126,20 +119,19 @@ mod simple_calc {
 
     #[test]
     fn test_simple_calc() {
-        let tokens: Vec<Token> = "5 * (9 + 2)".lex().unwrap().iter()
-            .map(|span| span.token.clone()).collect();
+        let tokens: Vec<Spanned<Token>> = lex("5 * (9 + 2)").unwrap();
         println!("{:?}", tokens);
-        let ast = tokens.parse().unwrap();
+        let ast = parse(&tokens).unwrap();
         println!("{:?}", ast);
-        let value = ast.eval().unwrap();
+        let value = eval(ast).unwrap();
         println!("{:?}", value);
     }
 
-    fn eval_expression(expr: (Expression), evaluator: &mut Evaluator) -> Value {
-        match expr {
+    fn eval_expression(expr: (Spanned<Expression>), evaluator: &mut Evaluator) -> Value {
+        match expr.item {
             Expression::Literal(literal)           => eval_literal(literal, evaluator),
             Expression::Infix { op, left, right }  => eval_infix(op, *left, *right, evaluator),
-            Expression::Prefix { op: _, right: _ }            => panic!("invalid prefix op"),
+            Expression::Prefix { op: _, right: _ } => panic!("invalid prefix op"),
         }
     }
     fn eval_literal(literal: Literal, _: &mut Evaluator) -> Value {
@@ -149,8 +141,8 @@ mod simple_calc {
     }
     fn eval_infix(
         op: InfixOp,
-        left: Expression,
-        right: Expression,
+        left: Spanned<Expression>,
+        right: Spanned<Expression>,
         evaluator: &mut Evaluator
     ) -> Value {
         let left_value = eval_expression(left, evaluator);

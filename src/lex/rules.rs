@@ -2,8 +2,8 @@ use std::char;
 
 use regex::{Regex, Captures};
 
-use lex::errors::lex_token::ErrorKind;
-use lex::errors::lex_token::rule::Result;
+use lex::errors::ErrorKind;
+use lex::errors::rule::Result;
 
 fn remove_underscores(input: &str) -> String {
     let mut s = String::new();

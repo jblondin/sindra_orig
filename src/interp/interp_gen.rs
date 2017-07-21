@@ -43,7 +43,7 @@ impl<W, E> Interpreter<W, E> where W: Write, E: Write {
     }
 
     pub fn process(&mut self, input: &str) -> Result {
-        match input.lex() {
+        match lex(input) {
             Ok(tokenspans) => {
                 if self.print_tokens {
                     for token in &tokenspans {
@@ -51,8 +51,7 @@ impl<W, E> Interpreter<W, E> where W: Write, E: Write {
                             STDOUT_ERRSTR, e))?;
                     }
                 }
-                let tokens: Vec<Token> = tokenspans.iter().map(|span| span.token.clone()).collect();
-                match tokens.parse() {
+                match parse(&tokenspans) {
                     Ok(program) => {
                         if self.print_ast {
                             writeln!(self.cout, "{:?}", program).map_err(|e| format!("{}: {}",

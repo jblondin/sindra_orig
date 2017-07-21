@@ -1,4 +1,3 @@
-
 #[macro_export]
 macro_rules! lexer {
     (
@@ -10,8 +9,9 @@ use std::fmt;
 
 use regex::{Regex, RegexSet, Match, Captures};
 
+use $crate::errors as lerr;
 use $crate::lex::errors as lex_errors;
-use $crate::lex::span::{self, Position, Offset, Span};
+use $crate::span as lspan;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -26,8 +26,6 @@ impl fmt::Display for Token {
     }
 }
 
-pub type TokenSpan<'a> = span::TokenSpan<'a, Token>;
-
 mod _token_funcs {
     #[allow(unused_imports)]
     use super::*;
@@ -40,10 +38,10 @@ mod _token_funcs {
             pub fn parse<'a>(
                 whole: &'a str,
                 captures: &Captures
-            ) -> lex_errors::lex_token::Result<'a, Token> {
+            ) -> lex_errors::Result<'a, Token> {
                 match $r_rule(whole, captures) {
                     Ok(value) => Ok(Token::$r_token(value)),
-                    Err(e)    => Err(lex_errors::lex_token::Error::new(whole, e)),
+                    Err(e)    => Err(lex_errors::Error::new(whole, e)),
                 }
             }
         }
@@ -70,19 +68,14 @@ impl RegexList {
     }
 }
 
-pub trait Lex {
-    fn lex<'a>(&'a self) -> lex_errors::Result<'a, Vec<TokenSpan<'a>>>;
-}
-impl Lex for str {
-    fn lex<'a>(&'a self) -> lex_errors::Result<'a, Vec<TokenSpan<'a>>> {
-        Lexer::new(self).lex()
-    }
+pub fn lex<'a>(input: &'a str) -> lerr::Result<'a, Vec<lspan::Spanned<'a, Token>>> {
+    Lexer::new(input).lex()
 }
 
 pub struct Lexer<'a> {
     input: &'a str,
     direct_tokens: Vec<Token>,
-    rules: Vec<fn(&'a str, &Captures) -> lex_errors::lex_token::Result<'a, Token>>,
+    rules: Vec<fn(&'a str, &Captures) -> lex_errors::Result<'a, Token>>,
 }
 impl<'a> Lexer<'a> {
     pub fn new(input: &'a str) -> Lexer<'a> {
@@ -92,7 +85,7 @@ impl<'a> Lexer<'a> {
             rules: vec![$(_token_funcs::$r_token::parse),*],
         }
     }
-    pub fn lex(&self) -> lex_errors::Result<'a, Vec<TokenSpan<'a>>> {
+    pub fn lex(&self) -> lerr::Result<'a, Vec<lspan::Spanned<'a, Token>>> {
         // compile the regexes twice, once for when we need to match individual regexes, and once
         // in the regex set (which processes all at once)
         // we also anchor each expression so it only matches the beginning of the input
@@ -106,7 +99,7 @@ impl<'a> Lexer<'a> {
             $(anchor_to_start($r_lexeme)),*
         ].iter()).unwrap();
 
-        let mut curr_pos = Position::start();
+        let mut curr_pos = lspan::Position::start();
         let mut tokens = vec![];
         let whitespace_devourer = Regex::new(r"^\s+").unwrap();
         let input_len = self.input.len();
@@ -115,7 +108,7 @@ impl<'a> Lexer<'a> {
             // eat some whitespace
             if let Some(mat) = whitespace_devourer.find(&self.input[curr_pos.byte..]) {
                 debug_assert_eq!(mat.start(), 0); // anchored at begining of line
-                curr_pos.offset(&Offset::from_str(mat.as_str()));
+                curr_pos.offset(&lspan::Offset::from_str(mat.as_str()));
                 if curr_pos.byte >= input_len {
                     break;
                 }
@@ -123,18 +116,18 @@ impl<'a> Lexer<'a> {
 
             // try to lex the next token
             let (token, matched) = self.lex_token(&self.input[curr_pos.byte..], &regex_list, &set)
-                .map_err(|lte| lex_errors::ErrorKind::Spanned(lte,
-                    Span::new(self.input, curr_pos)))?;
-            let offset = Offset::from_str(matched);
+                .map_err(|lte| lerr::Error::spanned(lerr::ErrorKind::LexToken(lte),
+                    lspan::Span::new(self.input, curr_pos)))?;
+            let offset = lspan::Offset::from_str(matched);
             if offset.nbytes() == 0 {
-                return Err(lex_errors::ErrorKind::WithSpan(
-                    "Regex error: 0-length string matched".to_string(),
-                    Span::new(self.input, curr_pos)));
+                return Err(lerr::Error::spanned(lerr::ErrorKind::Lex(
+                    "Regex error: 0-length string matched".to_string()),
+                    lspan::Span::new(self.input, curr_pos)));
             }
             let prev_pos = curr_pos;
             curr_pos.offset(&offset);
-            tokens.push(TokenSpan::new(token,
-                Span::new(&self.input[prev_pos.byte..curr_pos.byte], prev_pos)));
+            tokens.push(lspan::Spanned::new(token,
+                lspan::Span::new(&self.input[prev_pos.byte..curr_pos.byte], prev_pos)));
         }
         Ok(tokens)
     }
@@ -144,7 +137,7 @@ impl<'a> Lexer<'a> {
         input: &'a str,
         regex_list: &RegexList,
         set: &RegexSet)
-    -> lex_errors::lex_token::Result<'a, (Token, &'a str)> {
+    -> lex_errors::Result<'a, (Token, &'a str)> {
         debug_assert!(input.len() > 0);
 
         // general algorithm:
@@ -299,12 +292,12 @@ mod basic {
 
     #[test]
     fn test_multimatch() {
-        println!("{:?}", "+".lex());
-        println!("{:?}", "+=".lex());
-        println!("{:?}", "++=".lex());
-        println!("{:?}", "    + += ++=".lex());
-        println!("{:?}", "=
+        println!("{:?}", lex("+"));
+        println!("{:?}", lex("+="));
+        println!("{:?}", lex("++="));
+        println!("{:?}", lex("    + += ++="));
+        println!("{:?}", lex("=
 
-            +=+".lex());
+            +=+"));
     }
 }

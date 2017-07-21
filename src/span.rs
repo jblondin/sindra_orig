@@ -105,22 +105,21 @@ impl<'a> Span<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct TokenSpan<'a, T> {
-    pub token: T,
-
+pub struct Spanned<'a, T> {
+    pub item: T,
     pub span: Span<'a>,
 }
-impl<'a, T> TokenSpan<'a, T> where T: Debug + Clone + PartialEq {
-    pub fn new(token: T, span: Span<'a>) -> TokenSpan<'a, T> {
-        TokenSpan {
-            token: token,
+impl<'a, T> Spanned<'a, T> where T: Debug + Clone + PartialEq {
+    pub fn new(item: T, span: Span<'a>) -> Spanned<'a, T> {
+        Spanned {
+            item: item,
             span: span,
         }
     }
-    pub fn is_token(&self, token: &T) -> bool {
-        &self.token == token
+    pub fn spans_item(&self, item: &T) -> bool {
+        &self.item == item
     }
-    pub fn matches_token(&self, other: &TokenSpan<'a, T>) -> bool {
-        &self.token == &other.token
+    pub fn items_match(&self, other: &Spanned<'a, T>) -> bool {
+        &self.item == &other.item
     }
 }

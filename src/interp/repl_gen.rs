@@ -1,4 +1,3 @@
-
 #[macro_export]
 macro_rules! repl {
     (
@@ -116,7 +115,7 @@ impl<W, E> Repl<W, E> where W: Write, E: Write {
 
 
     fn read_eval_print(&mut self, input: String) -> Result {
-        match input.as_str().lex() {
+        match lex(&input) {
             Ok(tokenspans) => {
                 if self.print_tokens {
                     for token in &tokenspans {
@@ -124,8 +123,7 @@ impl<W, E> Repl<W, E> where W: Write, E: Write {
                             STDOUT_ERRSTR, e))?;
                     }
                 }
-                let tokens: Vec<Token> = tokenspans.iter().map(|span| span.token.clone()).collect();
-                match tokens.parse() {
+                match parse(&tokenspans) {
                     Ok(program) => {
                         if self.print_ast {
                             writeln!(self.cout, "{:?}", program).map_err(|e| format!("{}: {}",

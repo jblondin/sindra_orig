@@ -3,6 +3,7 @@ extern crate regex;
 
 use sindra::parse::precedence::StandardPrecedence;
 use sindra::lex::rules::{PTN_NUM, convert_num};
+use sindra::span::Spanned;
 
 lexer![
     r"\("                                   => LParen,
@@ -50,8 +51,8 @@ evaluator![
     ]
 ];
 
-fn eval_expression(expr: (Expression), evaluator: &mut Evaluator) -> Value {
-    match expr {
+fn eval_expression(expr: (Spanned<Expression>), evaluator: &mut Evaluator) -> Value {
+    match expr.item {
         Expression::Literal(literal)           => eval_literal(literal, evaluator),
         Expression::Infix { op, left, right }  => eval_infix(op, *left, *right, evaluator),
         Expression::Prefix { op, right }       => eval_prefix(op, *right, evaluator),
@@ -64,8 +65,8 @@ fn eval_literal(literal: Literal, _: &mut Evaluator) -> Value {
 }
 fn eval_infix(
     op: InfixOp,
-    left: Expression,
-    right: Expression,
+    left: Spanned<Expression>,
+    right: Spanned<Expression>,
     evaluator: &mut Evaluator
 ) -> Value {
     let left_value = eval_expression(left, evaluator);
@@ -81,7 +82,7 @@ fn eval_infix(
 }
 fn eval_prefix(
     op: PrefixOp,
-    right: Expression,
+    right: Spanned<Expression>,
     evaluator: &mut Evaluator
 ) -> Value {
     let right_value = eval_expression(right, evaluator);
@@ -135,8 +136,7 @@ fn posate_value(right: Value) -> Value {
 }
 
 fn assert_value_matches(s: &str, expected: Value) {
-    let value = s.lex().unwrap().iter().map(|span| span.token.clone()).collect::<Vec<_>>()
-        .parse().unwrap().eval().unwrap();
+    let value = parse(&lex(s).unwrap()).unwrap().eval().unwrap();
     assert_eq!(value, expected);
 }
 

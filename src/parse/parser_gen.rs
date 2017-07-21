@@ -1,4 +1,3 @@
-
 //TODO:
 // * make group_tokens optional
 // * remove reliance on precedence_type
@@ -24,20 +23,34 @@ macro_rules! parser {
         ]
     ) => (
 
-use $crate::parse::errors as perrors;
+use $crate::errors as perr;
+use $crate::span as pspan;
 
-use $crate::parse::precedence::{Precedence, Lowest};
-use $crate::parse::from_token::FromToken;
+use $crate::parse::precedence::Lowest;
+// use $crate::parse::from_token::FromToken;
 
-pub type Program = Block;
-pub type Block = Vec<Statement>;
+pub trait Precedence {
+    type OpPrecedence: Lowest;
+
+    fn precedence(&self) -> Option<Self::OpPrecedence>;
+}
+
+pub trait FromToken<T>: Sized {
+    fn from_token(tok: &T) -> Option<Self>;
+}
+
+type SpannedToken<'a> = pspan::Spanned<'a, $token_type>;
+
+pub type Program<'a> = Block<'a>;
+pub type Block<'a> = Vec<SpannedStatement<'a>>;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Statement {
+pub enum Statement<'a> {
     $(
         $statement_name(statement_args!($($statement_args_tt)*))
     ),*
 }
+type SpannedStatement<'a> = pspan::Spanned<'a, Statement<'a>>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
@@ -53,18 +66,19 @@ impl FromToken<$token_type> for Literal {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Expression {
+pub enum Expression<'a> {
     Literal(Literal),
     Infix {
         op: InfixOp,
-        left: Box<Expression>,
-        right: Box<Expression>
+        left: Box<SpannedExpr<'a>>,
+        right: Box<SpannedExpr<'a>>
     },
     Prefix {
         op: PrefixOp,
-        right: Box<Expression>,
+        right: Box<SpannedExpr<'a>>,
     },
 }
+type SpannedExpr<'a> = pspan::Spanned<'a, Expression<'a>>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PrefixOp {
@@ -101,195 +115,168 @@ impl FromToken<$token_type> for InfixOp {
     }
 }
 
-pub trait ParsePrefix{
-    fn parse_prefix(&self, parser: &mut Parser) -> perrors::Result<Option<Expression>>;
-}
-impl ParsePrefix for $token_type {
-    fn parse_prefix(&self, parser: &mut Parser) -> perrors::Result<Option<Expression>> {
-        match *self {
-            // add all the literals as prefixes
-            $(
-                // from_token always returns Some(_) for Literals, unwrap is safe
-                $literal_token(value) => Ok(Some(Expression::Literal(
-                    Literal::from_token(&$literal_token(value)).unwrap()))),
-            )*
-            $group_token_start => Ok(parser.parse_grouped_expression()?),
-            $(
-                $prefix_token => {
-                    //FIXME: I think this will break on a input-ending unary prefix operator
-                    match parser.parse_expression($prefix_precedence)? {
-                        Some(right) => {
-                            // FromToken is always defined at this repetition level, unwrap is safe
-                            Ok(Some(Expression::Prefix {
-                                op: PrefixOp::from_token(&$prefix_token).unwrap(),
-                                right: Box::new(right),
-                            }))
-                        },
-                        None => Ok(None),
-                    }
-                },
-            )*
-            _ => Ok(None)
-        }
-    }
-}
-
-pub trait ParseInfix: Precedence {
-    // parse_infix _must_ advance tokens if it returns Ok(Some(_))
-    fn parse_infix(&self, left: Expression, parser: &mut Parser)
-        -> perrors::Result<Option<Expression>>;
-}
-impl ParseInfix for $token_type {
-    fn parse_infix(&self,
-        left: Expression,
-        parser: &mut Parser,
-    ) -> perrors::Result<Option<Expression>> {
-        match *self {
-            $(
-                $infix_token => {
-                    // both Precedence and FromToken are defined above for this repeated clause,
-                    // so unwraps are safe
-                    let curr_precedence = self.precedence().unwrap();
-                    parser.state.next().unwrap(); // advance tokens
-                    match parser.parse_expression(curr_precedence)? {
-                        Some(right) => {
-                            Ok(Some(Expression::Infix {
-                                op: InfixOp::from_token(&$infix_token).unwrap(),
-                                left: Box::new(left),
-                                right: Box::new(right),
-                            }))
-                        },
-                        None => Ok(None)
-                    }
-                }
-            ,)*
-            _ => Ok(None)
-        }
-    }
-}
-
-impl Precedence for $token_type {
+impl<'a> Precedence for SpannedToken<'a> {
     type OpPrecedence = $precedence_type;
 
     fn precedence(&self) -> Option<Self::OpPrecedence> {
-        InfixOp::from_token(self).and_then(|io| io.precedence())
+        InfixOp::from_token(&self.item).and_then(|io| io.precedence())
     }
 }
 
-type ParserState<'a> = ::std::iter::Peekable<::std::slice::Iter<'a, $token_type>>;
+type ParserState<'a> = ::std::iter::Peekable<::std::slice::Iter<'a, SpannedToken<'a>>>;
 
-pub trait Parse {
-    fn parse(&self) -> perrors::Result<Program>;
-}
-impl Parse for Vec<$token_type> {
-    fn parse(&self) -> perrors::Result<Program> {
-        Parser::new(self).parse()
+pub fn parse<'a>(tokens: &'a Vec<SpannedToken<'a>>) -> perr::Result<'a, Program<'a>> {
+    let mut state = tokens.iter().peekable();
+    let mut program: Program = Program::new();
+    while state.peek().is_some() {
+        program.push(parse_statement(&mut state)?);
     }
+    Ok(program)
 }
 
-pub struct Parser<'a> {
-    state: ParserState<'a>
-}
-impl<'a> Parser<'a> {
-    pub fn new(tokens: &'a Vec<$token_type>) -> Parser {
-        Parser {
-            state: tokens.iter().peekable(),
+fn parse_statement<'a>(state: &mut ParserState<'a>) -> perr::Result<'a, SpannedStatement<'a>> {
+    debug_assert!(state.peek().is_some());
+    $(
+        match _parse_statement::$statement_name(state)? {
+            Some(s) => {
+                return Ok(s);
+            },
+            None => {
+                // continue on to try next statement
+            }
         }
-    }
-    pub fn parse(&mut self) -> perrors::Result<Program> {
-        let mut program = Program::new();
-        while self.state.peek().is_some() {
-            program.push(self.parse_statement()?);
-        }
-        Ok(program)
+    )*
+    Err(perr::Error::nospan(perr::ErrorKind::Parse("no statement found".to_string())))
+}
+
+fn parse_expression<'a>(
+    state: &mut ParserState<'a>,
+    precedence: $precedence_type,
+) -> perr::ResOpt<'a, SpannedExpr<'a>> {
+    debug_assert!(state.peek().is_some());
+    let prefix_opt = parse_prefix(state)?;
+    if prefix_opt.is_none() {
+        return Ok(None);
     }
 
-    fn parse_statement(&mut self) -> perrors::Result<Statement> {
-        debug_assert!(self.state.peek().is_some());
+    cond!(
+        if empty($($infix_token,)*) {
+            Ok(Some(prefix_opt.unwrap()))
+        } else {
+            let mut left_expr = prefix_opt.unwrap();
+            while precedence < peek_precedence(state) {
+                let infix_expr = match parse_infix(state)? {
+                    Some((op, right_expr)) => {
+                        let left_span = left_expr.span;
+                        pspan::Spanned::new(
+                            Expression::Infix {
+                                op: op,
+                                left: Box::new(left_expr),
+                                right: Box::new(right_expr),
+                            },
+                            left_span
+                        )
+                    },
+                    None => {
+                        return Ok(Some(left_expr));
+                    }
+                };
+                left_expr = infix_expr;
+            }
+            Ok(Some(left_expr))
+        }
+    )
+}
+
+fn peek_precedence<'a>(state: &mut ParserState<'a>) -> $precedence_type {
+    // get the precedence of the next token (lowest if no token exists)
+    if let Some(&&ref peek_tok) = state.peek() {
+        match peek_tok.precedence() {
+            Some(prec) => prec,
+            None => <$precedence_type>::lowest(),
+        }
+    } else {
+        <$precedence_type>::lowest()
+    }
+}
+
+fn parse_grouped_expression<'a>(state: &mut ParserState<'a>) -> perr::ResOpt<'a, SpannedExpr<'a>> {
+    let expr = parse_expression(state, <$precedence_type>::lowest())?;
+    expect_peek_token(state, &$group_token_end)?;
+    // consume group end token
+    state.next().unwrap();
+    Ok(expr)
+}
+
+fn expect_peek_token<'a>(
+    state: &mut ParserState<'a>,
+    expected: &$token_type
+) -> perr::Result<'a, ()> {
+    if let Some(&&ref peek_tok) = state.peek() {
+        if peek_tok.spans_item(expected) {
+            Ok(())
+        } else {
+            Err(perr::Error::spanned(
+                perr::ErrorKind::Parse(format!("expected token {}, found token {}", expected,
+                    peek_tok.item)),
+                peek_tok.span
+            ))
+        }
+    } else {
+        Err(perr::Error::nospan(
+            perr::ErrorKind::Parse(format!("expected token {} at end of input", expected))
+        ))
+    }
+}
+
+fn parse_prefix<'a>(state: &mut ParserState<'a>) -> perr::ResOpt<'a, SpannedExpr<'a>> {
+    debug_assert!(state.peek().is_some());
+    let &pspan::Spanned { span, item: ref token } = state.next().unwrap();
+    match *token {
+        // add all the literals as prefixes
         $(
-            match _parse_statement::$statement_name(self)? {
-                Some(s) => {
-                    return Ok(s);
-                },
-                None => {
-                    // continue on to try next statement
-                }
-            }
+            // from_token always returns Some(_) for Literals, unwrap is safe
+            $literal_token(value) => Ok(Some(pspan::Spanned::new(Expression::Literal(
+                Literal::from_token(&$literal_token(value)).unwrap()), span))),
         )*
-        Err(perrors::ErrorKind::Parse("no statement found".to_string()))
-    }
-    fn parse_expression(
-        &mut self,
-        precedence: $precedence_type,
-    ) -> perrors::Result<Option<Expression>> {
-        debug_assert!(self.state.peek().is_some());
-        // this clone is potentially very costly, but necessary to avoid mutiple
-        // mutable borrow of state.
-        // TODO: this can be avoided by restructuring the code a bit here (and
-        // modifying how ParseInfix works)
-        let tok = self.state.next().unwrap().clone();
-        let prefix_opt = tok.parse_prefix(self)?;
-        if prefix_opt.is_none() {
-            return Ok(None);
-        }
-
-        cond!(
-            if empty($($infix_token,)*) {
-                Ok(Some(prefix_opt.unwrap()))
-            } else {
-                let mut left_expr = prefix_opt.unwrap();
-                while precedence < self.peek_precedence() {
-                    // if no peek token, we can't get here (due to peek_precedence), so unwrap is ok
-                    debug_assert!(self.state.peek().is_some());
-
-                    let infix_expr = {
-                        // this clone is potentially very costly, but necessary to avoid mutiple
-                        // mutable borrow of state.
-                        // TODO: this can be avoided by restructuring the code a bit here (and
-                        // modifying how ParseInfix works)
-                        let peek_tok = self.state.peek().unwrap().clone();
-                        // parse_infix is guaranteed to either advance tokens, or return None
-                        let infix = peek_tok.parse_infix(left_expr.clone(), self)?;
-                        if infix.is_none() {
-                            return Ok(Some(left_expr));
-                        }
-                        infix.unwrap()
-                    };
-                    left_expr = infix_expr;
+        $group_token_start => Ok(parse_grouped_expression(state)?),
+        $(
+            $prefix_token => {
+                //FIXME: I think this will break on a input-ending unary prefix operator
+                match parse_expression(state, $prefix_precedence)? {
+                    Some(right) => {
+                        // FromToken is always defined at this repetition level, unwrap is safe
+                        Ok(Some(pspan::Spanned::new(
+                            Expression::Prefix {
+                                op: PrefixOp::from_token(&$prefix_token).unwrap(),
+                                right: Box::new(right),
+                            },
+                            span
+                        )))
+                    },
+                    None => Ok(None),
                 }
-                Ok(Some(left_expr))
-            }
-        )
+            },
+        )*
+        _ => Ok(None)
     }
-    fn peek_precedence(&mut self) -> $precedence_type {
-        // get the precedence of the next token (lowest if no token exists)
-        if let Some(&&ref peek_tok) = self.state.peek() {
-            match peek_tok.precedence() {
-                Some(prec) => prec,
-                None => <$precedence_type>::lowest(),
+}
+fn parse_infix<'a>(state: &mut ParserState<'a>) -> perr::ResOpt<'a, (InfixOp, SpannedExpr<'a>)> {
+    // if no peek token, we can't get here (due to peek_precedence), so unwrap is ok
+    debug_assert!(state.peek().is_some());
+    let &&ref spanned_tok = state.peek().unwrap();
+    match spanned_tok.item {
+        $(
+            $infix_token => {
+                // both Precedence and FromToken are defined above for this repeated clause,
+                // so unwraps are safe
+                let curr_precedence = spanned_tok.precedence().unwrap();
+                state.next().unwrap(); // advance tokens
+                let op = InfixOp::from_token(&$infix_token).unwrap();
+                parse_expression(state, curr_precedence).map(|opt| opt.map(|expr| (op, expr)))
             }
-        } else {
-            <$precedence_type>::lowest()
-        }
-    }
-    fn parse_grouped_expression(&mut self) -> perrors::Result<Option<Expression>> {
-        let expr = self.parse_expression(<$precedence_type>::lowest())?;
-        self.expect_peek_token(&$group_token_end)?;
-        // consume group end token
-        self.state.next().unwrap();
-        Ok(expr)
-    }
-    fn expect_peek_token(&mut self, tok: &$token_type) -> perrors::Result<()> {
-        if let Some(&&ref peek_tok) = self.state.peek() {
-            if peek_tok == tok {
-                Ok(())
-            } else {
-                Err(perrors::ErrorKind::Parse(format!("expected token {}, found token {}",
-                    tok, peek_tok)))
-            }
-        } else {
-            Err(perrors::ErrorKind::Parse(format!("expected token {} at end of input", tok)))
-        }
+        ,)*
+        _ => Ok(None)
     }
 }
 
@@ -299,10 +286,18 @@ mod _parse_statement {
 
     $(
         #[allow(non_snake_case)]
-        pub fn $statement_name(parser: &mut Parser) -> perrors::Result<Option<Statement>> {
-            statement_body!(parser, $precedence_type; $($statement_tt)*);
-            // there were enough tokens, and they all matched!
-            Ok(Some(Statement::$statement_name(statement_binds!($($statement_tt)*))))
+        pub fn $statement_name<'a>(state: &mut ParserState<'a>)
+                -> perr::ResOpt<'a, pspan::Spanned<'a, Statement<'a>>> {
+            if let Some(&&pspan::Spanned { span: start_span, .. }) = state.peek() {
+                statement_body!(state, $precedence_type; $($statement_tt)*);
+                // there were enough tokens, and they all matched!
+                Ok(Some(pspan::Spanned::new(
+                    Statement::$statement_name(statement_binds!($($statement_tt)*)),
+                    start_span
+                )))
+            } else {
+                Ok(None) // end of input
+            }
         }
     )*
 }
@@ -315,8 +310,8 @@ mod _parse_statement {
 #[allow(dead_code)]
 mod simple_calc {
 
+    use span::Spanned;
     use lex::rules::{PTN_INT, convert_int};
-
     use parse::precedence::StandardPrecedence;
 
     lexer![
@@ -347,10 +342,9 @@ mod simple_calc {
 
     #[test]
     fn test_simple_calc() {
-        let tokens: Vec<Token> = "5 * (9 + 2)".lex().unwrap().iter()
-            .map(|span| span.token.clone()).collect();
+        let tokens: Vec<Spanned<Token>> = lex("5 * (9 + 2)").unwrap();
         println!("{:?}", tokens);
-        let ast = tokens.parse();
+        let ast = parse(&tokens);
         println!("{:?}", ast);
 
     }
@@ -360,6 +354,7 @@ mod simple_calc {
 #[allow(dead_code, unused_variables)]
 mod statements {
 
+    use span::Spanned;
     use parse::precedence::StandardPrecedence;
     use lex::rules::{PTN_INT, convert_int};
 
@@ -388,10 +383,9 @@ mod statements {
 
     #[test]
     fn test_statement() {
-        let tokens: Vec<Token> = "add 5 to 9".lex().unwrap().iter()
-            .map(|span| span.token.clone()).collect();
+        let tokens: Vec<Spanned<Token>> = lex("add 5 to 9").unwrap();
         println!("{:?}", tokens);
-        let ast = tokens.parse();
+        let ast = parse(&tokens);
         println!("{:?}", ast);
     }
 }

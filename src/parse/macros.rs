@@ -33,34 +33,34 @@ macro_rules! statement_binds {
 #[macro_export]
 macro_rules! statement_args {
     (_cont identifier<$ident_name:ident>) => (
-        Identifier
+        pspan::Spanned<'a, Identifier>
     );
     (_cont expression<$expr_name:ident>) => (
-        Expression
+        pspan::Spanned<'a, Expression<'a>>
     );
     (_cont identifier<$ident_name:ident>, $($statement_arg_tt:tt)*) => (
-        Identifier, statement_args!(_cont $($statement_arg_tt)*)
+        pspan::Spanned<'a, Identifier>, statement_args!(_cont $($statement_arg_tt)*)
     );
     (_cont expression<$expr_name:ident>, $($statement_arg_tt:tt)*) => (
-        Expression, statement_args!(_cont $($statement_arg_tt)*)
+        pspan::Spanned<'a, Expression<'a>>, statement_args!(_cont $($statement_arg_tt)*)
     );
-    (identifier<$ident_name:ident>) => ((Identifier));
-    (expression<$expr_name:ident>) => ((Expression));
+    (identifier<$ident_name:ident>) => ((pspan::Spanned<'a, Identifier>));
+    (expression<$expr_name:ident>) => ((pspan::Spanned<'a, Expression<'a>>));
     (identifier<$ident_name:ident>, $($statement_arg_tt:tt)*) => (
-        (Identifier, statement_args!(_cont $($statement_arg_tt)*))
+        (pspan::Spanned<'a, Identifier>, statement_args!(_cont $($statement_arg_tt)*))
     );
     (expression<$expr_name:ident>, $($statement_arg_tt:tt)*) => (
-        (Expression, statement_args!(_cont $($statement_arg_tt)*))
+        (pspan::Spanned<'a, Expression<'a>>, statement_args!(_cont $($statement_arg_tt)*))
     );
 }
 
 #[macro_export]
 macro_rules! statement_body {
-    ($parser:ident, $prec_ty:ty; ) => (); // endpoint
-    ($parser:ident, $prec_ty:ty; identifier<$ident_name:ident> $($rest:tt)*) => (
+    ($state:ident, $prec_ty:ty; ) => (); // endpoint
+    ($state:ident, $prec_ty:ty; identifier<$ident_name:ident> $($rest:tt)*) => (
         let $ident_name = {
-            if $parser.state.peek().is_some() {
-                match $parser.parse_identifier() {
+            if $state.peek().is_some() {
+                match parse_identifier($state) {
                     Ok(ident) => ident
                     Err(_) => { return Ok(None); }
                 }
@@ -69,12 +69,12 @@ macro_rules! statement_body {
                 return Ok(None);
             }
         };
-        statement_body!($parser, $prec_ty; $($rest)*);
+        statement_body!($state, $prec_ty; $($rest)*);
     );
-    ($parser:ident, $prec_ty:ty; expression<$expr_name:ident> $($rest:tt)*) => (
+    ($state:ident, $prec_ty:ty; expression<$expr_name:ident> $($rest:tt)*) => (
         let $expr_name = {
-            if $parser.state.peek().is_some() {
-                match $parser.parse_expression(<$prec_ty>::lowest()) {
+            if $state.peek().is_some() {
+                match parse_expression($state, <$prec_ty>::lowest()) {
                     Ok(expr_opt) => {
                         match expr_opt {
                             Some(expr) => expr,
@@ -88,12 +88,12 @@ macro_rules! statement_body {
                 return Ok(None);
             }
         };
-        statement_body!($parser, $prec_ty; $($rest)*);
+        statement_body!($state, $prec_ty; $($rest)*);
     );
-    ($parser:ident, $prec_ty:ty; token<$tok:path> $($rest:tt)*) => (
+    ($state:ident, $prec_ty:ty; token<$tok:path> $($rest:tt)*) => (
         {
-            if let Some(curr_tok) = $parser.state.next() {
-                if &$tok != curr_tok {
+            if let Some(curr_tok) = $state.next() {
+                if !curr_tok.spans_item(&$tok)  {
                     // token doesn't match pattern, return none
                     return Ok(None);
                 }
@@ -102,7 +102,7 @@ macro_rules! statement_body {
                 return Ok(None);
             }
         }
-        statement_body!($parser, $prec_ty; $($rest)*);
+        statement_body!($state, $prec_ty; $($rest)*);
     );
 }
 

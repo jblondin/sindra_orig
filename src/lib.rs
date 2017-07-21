@@ -1,6 +1,9 @@
 #[macro_use] extern crate lazy_static;
 extern crate regex;
 
+pub mod errors;
+pub mod span;
+
 #[macro_use] pub mod lex;
 #[macro_use] pub mod parse;
 #[macro_use] pub mod eval;
