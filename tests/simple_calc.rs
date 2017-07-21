@@ -136,7 +136,7 @@ fn posate_value(right: Value) -> Value {
 }
 
 fn assert_value_matches(s: &str, expected: Value) {
-    let value = parse(&lex(s).unwrap()).unwrap().eval().unwrap();
+    let value = eval(parse(&lex(s).unwrap()).unwrap()).unwrap();
     assert_eq!(value, expected);
 }
 
