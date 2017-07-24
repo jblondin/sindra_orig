@@ -4,7 +4,11 @@ extern crate rustyline;
 extern crate clap;
 
 mod lexer {
-    use sindra::lex::rules::{PTN_NUM, convert_num};
+    use sindra::lex::rules::{
+        PTN_NUM, convert_num,
+        PTN_IDENTIFIER, convert_identifier,
+        PTN_STRING, convert_string,
+    };
 
     lexer![
         r"\("                                   => LParen,
@@ -15,6 +19,8 @@ mod lexer {
         r"\*"                                   => Asterisk,
         r"\^"                                   => Caret,
         PTN_NUM         => convert_num          => NumLiteral<f64>,
+        PTN_STRING      => convert_string       => StrLiteral<String>,
+        PTN_IDENTIFIER  => convert_identifier   => Identifier<String>,
     ];
 }
 
@@ -25,12 +31,14 @@ mod parser {
     parser![
         token_type: Token,
         group_tokens: (Token::LParen, Token::RParen),
-        statements: [
-            ExpressionStmt(expression<value>) := {expression<value>}
-        ],
         literals: [
             Token::NumLiteral => Float<f64>,
+            Token::StrLiteral => Str<String>,
         ],
+        statements: [
+            ExpressionStmt(expression<value>) := {expression<value>},
+        ],
+        identifier_token: Token::Identifier,
         precedence_type: StandardPrecedence,
         prefix<StandardPrecedence::Prefix>: [
             Token::Plus     => Plus,
@@ -70,6 +78,7 @@ use self::evaluator::{Evaluator, Value};
 fn eval_expression(expr: (Spanned<Expression>), evaluator: &mut Evaluator) -> Value {
     match expr.item {
         Expression::Literal(literal)           => eval_literal(literal, evaluator),
+        Expression::Identifier(_)              => Value::Empty,
         Expression::Infix { op, left, right }  => eval_infix(op, *left, *right, evaluator),
         Expression::Prefix { op, right }       => eval_prefix(op, *right, evaluator),
     }
@@ -77,6 +86,7 @@ fn eval_expression(expr: (Spanned<Expression>), evaluator: &mut Evaluator) -> Va
 fn eval_literal(literal: Literal, _: &mut Evaluator) -> Value {
     match literal {
         Literal::Float(f)    => Value::Float(f),
+        Literal::Str(_)      => Value::Float(0.0),
     }
 }
 fn eval_infix(

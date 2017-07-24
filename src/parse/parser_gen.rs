@@ -5,9 +5,10 @@ macro_rules! parser_impl {
     (
         _token_type($token_type:ty)
         _group_tokens(($group_token_start:path, $group_token_end:path))
+        _identifier_token($identifier_token:path)
         _statements([
             $($statement_name:tt($($statement_args_tt:tt)*)
-                := { $($statement_tt:tt)* })*
+                := { $($statement_tt:tt)* },)*
         ])
         _literals([
             $($literal_token:path => $literal_name:ident<$literal_type:ty>,)*
@@ -53,18 +54,25 @@ type SpannedStatement<'a> = Spanned<'a, Statement<'a>>;
 pub enum Literal {
     $($literal_name($literal_type),)*
 }
-impl FromToken<$token_type> for Literal {
-    fn from_token(tok: &$token_type) -> Option<Literal> {
-        match *tok {
-            $($literal_token(value) => Some(Literal::$literal_name(value)),)*
-            _ => None,
-        }
+
+#[derive(Debug, Hash, Clone, PartialEq, Eq)]
+pub struct Identifier {
+    pub name: String,
+}
+#[allow(dead_code)]
+impl Identifier {
+    pub fn new<T: AsRef<str>>(name: T) -> Identifier {
+        Identifier { name: name.as_ref().to_string() }
     }
 }
+#[allow(dead_code)]
+type SpannedIdentifier<'a> = Spanned<'a, Identifier>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expression<'a> {
     Literal(Literal),
+    #[allow(dead_code)]
+    Identifier(Identifier),
     Infix {
         op: InfixOp,
         left: Box<SpannedExpr<'a>>,
@@ -144,6 +152,18 @@ fn parse_statement<'a>(state: &mut ParserState<'a>) -> errors::Result<'a, Spanne
         }
     )*
     Err(errors::Error::nospan(errors::ErrorKind::Parse("no statement found".to_string())))
+}
+
+#[allow(dead_code)]
+fn parse_identifier<'a>(state: &mut ParserState<'a>) -> errors::Result<'a, SpannedIdentifier<'a>> {
+    debug_assert!(state.peek().is_some());
+    let &Spanned { span, item: ref token } = state.next().unwrap();
+    if let $identifier_token(ref ident_name) = *token {
+        Ok(Spanned::new(Identifier::new(ident_name), span))
+    } else {
+        Err(errors::Error::spanned(errors::ErrorKind::Parse(
+            "attempt to parse identifier from non-identifier token".to_string()), span))
+    }
 }
 
 fn parse_expression<'a>(
@@ -233,9 +253,12 @@ fn parse_prefix<'a>(state: &mut ParserState<'a>) -> errors::ResOpt<'a, SpannedEx
         // add all the literals as prefixes
         $(
             // from_token always returns Some(_) for Literals, unwrap is safe
-            $literal_token(value) => Ok(Some(Spanned::new(Expression::Literal(
-                Literal::from_token(&$literal_token(value)).unwrap()), span))),
+            $literal_token(ref value) => Ok(Some(Spanned::new(Expression::Literal(
+                Literal::$literal_name(value.clone())), span))),
         )*
+        // add identifier as prefixes
+        $identifier_token(ref s) => Ok(Some(Spanned::new(Expression::Identifier(Identifier::new(s)),
+            span))),
         $group_token_start => Ok(parse_grouped_expression(state)?),
         $(
             $prefix_token => {
@@ -305,6 +328,7 @@ mod _parse_statement {
     (
         _token_type($($token_type_val:tt)*)
         _group_tokens($($group_tokens_val:tt)*)
+        _identifier_token($($identifier_token_val:tt)*)
         _statements($($statements_val:tt)*)
         _literals($($literals_val:tt)*)
         _precedence_type($($precedence_type_val:tt)*)
@@ -316,6 +340,7 @@ mod _parse_statement {
         parser_impl!(
             _token_type($token_type)
             _group_tokens($($group_tokens_val)*)
+            _identifier_token($($identifier_token_val)*)
             _statements($($statements_val)*)
             _literals($($literals_val)*)
             _precedence_type($($precedence_type_val)*)
@@ -327,6 +352,7 @@ mod _parse_statement {
     (
         _token_type($($token_type_val:tt)*)
         _group_tokens($($group_tokens_val:tt)*)
+        _identifier_token($($identifier_token_val:tt)*)
         _statements($($statements_val:tt)*)
         _literals($($literals_val:tt)*)
         _precedence_type($($precedence_type_val:tt)*)
@@ -337,6 +363,7 @@ mod _parse_statement {
         parser_impl!(
             _token_type($token_type)
             _group_tokens($($group_tokens_val)*)
+            _identifier_token($($identifier_token_val)*)
             _statements($($statements_val)*)
             _literals($($literals_val)*)
             _precedence_type($($precedence_type_val)*)
@@ -349,6 +376,7 @@ mod _parse_statement {
     (
         _token_type($($token_type_val:tt)*)
         _group_tokens($($group_tokens_val:tt)*)
+        _identifier_token($($identifier_token_val:tt)*)
         _statements($($statements_val:tt)*)
         _literals($($literals_val:tt)*)
         _precedence_type($($precedence_type_val:tt)*)
@@ -360,6 +388,7 @@ mod _parse_statement {
         parser_impl!(
             _token_type($($token_type_val)*)
             _group_tokens(($group_token_start, $group_token_end))
+            _identifier_token($($identifier_token_val)*)
             _statements($($statements_val)*)
             _literals($($literals_val)*)
             _precedence_type($($precedence_type_val)*)
@@ -371,6 +400,7 @@ mod _parse_statement {
     (
         _token_type($($token_type_val:tt)*)
         _group_tokens($($group_tokens_val:tt)*)
+        _identifier_token($($identifier_token_val:tt)*)
         _statements($($statements_val:tt)*)
         _literals($($literals_val:tt)*)
         _precedence_type($($precedence_type_val:tt)*)
@@ -381,6 +411,7 @@ mod _parse_statement {
         parser_impl!(
             _token_type($($token_type_val)*)
             _group_tokens(($group_token_start, $group_token_end))
+            _identifier_token($($identifier_token_val)*)
             _statements($($statements_val)*)
             _literals($($literals_val)*)
             _precedence_type($($precedence_type_val)*)
@@ -389,26 +420,24 @@ mod _parse_statement {
         );
     );
 
-    // setting statements
+    // setting identifier type
     (
         _token_type($($token_type_val:tt)*)
         _group_tokens($($group_tokens_val:tt)*)
+        _identifier_token($($identifier_token_val:tt)*)
         _statements($($statements_val:tt)*)
         _literals($($literals_val:tt)*)
         _precedence_type($($precedence_type_val:tt)*)
         _prefix($($prefix_precedence_val:tt)*)($($prefix_val:tt)*)
         _infix($($infix_val:tt)*)
-        statements: [
-            $($statement_name:tt($($statement_args_tt:tt)*)
-                := { $($statement_tt:tt)* })*
-        ],
+        identifier_token: $identifier_token:path,
         $($suffix:tt)*
     ) => (
         parser_impl!(
             _token_type($($token_type_val)*)
             _group_tokens($($group_tokens_val)*)
-            _statements([$($statement_name($($statement_args_tt)*)
-                := { $($statement_tt)* })*])
+            _identifier_token($identifier_token)
+            _statements($($statements_val)*)
             _literals($($literals_val)*)
             _precedence_type($($precedence_type_val)*)
             _prefix($($prefix_precedence_val)*)($($prefix_val)*)
@@ -419,6 +448,32 @@ mod _parse_statement {
     (
         _token_type($($token_type_val:tt)*)
         _group_tokens($($group_tokens_val:tt)*)
+        _identifier_token($($identifier_token_val:tt)*)
+        _statements($($statements_val:tt)*)
+        _literals($($literals_val:tt)*)
+        _precedence_type($($precedence_type_val:tt)*)
+        _prefix($($prefix_precedence_val:tt)*)($($prefix_val:tt)*)
+        _infix($($infix_val:tt)*)
+        identifier_token: $identifier_token:path
+    ) => (
+        parser_impl!(
+            _token_type($token_type)
+            _group_tokens($($group_tokens_val)*)
+            _identifier_token($identifier_token)
+            _statements($($statements_val)*)
+            _literals($($literals_val)*)
+            _precedence_type($($precedence_type_val)*)
+            _prefix($($prefix_precedence_val)*)($($prefix_val)*)
+            _infix($($infix_val)*)
+        );
+    );
+
+
+    // setting statements
+    (
+        _token_type($($token_type_val:tt)*)
+        _group_tokens($($group_tokens_val:tt)*)
+        _identifier_token($($identifier_token_val:tt)*)
         _statements($($statements_val:tt)*)
         _literals($($literals_val:tt)*)
         _precedence_type($($precedence_type_val:tt)*)
@@ -426,14 +481,43 @@ mod _parse_statement {
         _infix($($infix_val:tt)*)
         statements: [
             $($statement_name:tt($($statement_args_tt:tt)*)
-                := { $($statement_tt:tt)* })*
+                := { $($statement_tt:tt)* },)*
+        ],
+        $($suffix:tt)*
+    ) => (
+        parser_impl!(
+            _token_type($($token_type_val)*)
+            _group_tokens($($group_tokens_val)*)
+            _identifier_token($($identifier_token_val)*)
+            _statements([$($statement_name($($statement_args_tt)*)
+                := { $($statement_tt)* },)*])
+            _literals($($literals_val)*)
+            _precedence_type($($precedence_type_val)*)
+            _prefix($($prefix_precedence_val)*)($($prefix_val)*)
+            _infix($($infix_val)*)
+            $($suffix)*
+        );
+    );
+    (
+        _token_type($($token_type_val:tt)*)
+        _group_tokens($($group_tokens_val:tt)*)
+        _identifier_token($($identifier_token_val:tt)*)
+        _statements($($statements_val:tt)*)
+        _literals($($literals_val:tt)*)
+        _precedence_type($($precedence_type_val:tt)*)
+        _prefix($($prefix_precedence_val:tt)*)($($prefix_val:tt)*)
+        _infix($($infix_val:tt)*)
+        statements: [
+            $($statement_name:tt($($statement_args_tt:tt)*)
+                := { $($statement_tt:tt)* },)*
         ]
     ) => (
         parser_impl!(
             _token_type($($token_type_val)*)
             _group_tokens($($group_tokens_val)*)
+            _identifier_token($($identifier_token_val)*)
             _statements([$($statement_name($($statement_args_tt)*)
-                := { $($statement_tt)* })*])
+                := { $($statement_tt)* },)*])
             _literals($($literals_val)*)
             _precedence_type($($precedence_type_val)*)
             _prefix($($prefix_precedence_val)*)($($prefix_val)*)
@@ -445,6 +529,7 @@ mod _parse_statement {
     (
         _token_type($($token_type_val:tt)*)
         _group_tokens($($group_tokens_val:tt)*)
+        _identifier_token($($identifier_token_val:tt)*)
         _statements($($statements_val:tt)*)
         _literals($($literals_val:tt)*)
         _precedence_type($($precedence_type_val:tt)*)
@@ -458,6 +543,7 @@ mod _parse_statement {
         parser_impl!(
             _token_type($($token_type_val)*)
             _group_tokens($($group_tokens_val)*)
+            _identifier_token($($identifier_token_val)*)
             _statements($($statements_val)*)
             _literals([$($literal_token => $literal_name<$literal_type>,)*])
             _precedence_type($($precedence_type_val)*)
@@ -469,6 +555,7 @@ mod _parse_statement {
     (
         _token_type($($token_type_val:tt)*)
         _group_tokens($($group_tokens_val:tt)*)
+        _identifier_token($($identifier_token_val:tt)*)
         _statements($($statements_val:tt)*)
         _literals($($literals_val:tt)*)
         _precedence_type($($precedence_type_val:tt)*)
@@ -481,6 +568,7 @@ mod _parse_statement {
         parser_impl!(
             _token_type($($token_type_val)*)
             _group_tokens($($group_tokens_val)*)
+            _identifier_token($($identifier_token_val)*)
             _statements($($statements_val)*)
             _literals([$($literal_token => $literal_name<$literal_type>,)*])
             _precedence_type($($precedence_type_val)*)
@@ -494,6 +582,7 @@ mod _parse_statement {
     (
         _token_type($($token_type_val:tt)*)
         _group_tokens($($group_tokens_val:tt)*)
+        _identifier_token($($identifier_token_val:tt)*)
         _statements($($statements_val:tt)*)
         _literals($($literals_val:tt)*)
         _precedence_type($($precedence_type_val:tt)*)
@@ -505,6 +594,7 @@ mod _parse_statement {
         parser_impl!(
             _token_type($($token_type_val)*)
             _group_tokens($($group_tokens_val)*)
+            _identifier_token($($identifier_token_val)*)
             _statements($($statements_val)*)
             _literals($($literals_val)*)
             _precedence_type($precedence_type)
@@ -516,6 +606,7 @@ mod _parse_statement {
     (
         _token_type($($token_type_val:tt)*)
         _group_tokens($($group_tokens_val:tt)*)
+        _identifier_token($($identifier_token_val:tt)*)
         _statements($($statements_val:tt)*)
         _literals($($literals_val:tt)*)
         _precedence_type($($precedence_type_val:tt)*)
@@ -526,6 +617,7 @@ mod _parse_statement {
         parser_impl!(
             _token_type($($token_type_val)*)
             _group_tokens($($group_tokens_val)*)
+            _identifier_token($($identifier_token_val)*)
             _statements($($statements_val)*)
             _literals($($literals_val)*)
             _precedence_type($precedence_type)
@@ -538,6 +630,7 @@ mod _parse_statement {
     (
         _token_type($($token_type_val:tt)*)
         _group_tokens($($group_tokens_val:tt)*)
+        _identifier_token($($identifier_token_val:tt)*)
         _statements($($statements_val:tt)*)
         _literals($($literals_val:tt)*)
         _precedence_type($($precedence_type_val:tt)*)
@@ -551,6 +644,7 @@ mod _parse_statement {
         parser_impl!(
             _token_type($($token_type_val)*)
             _group_tokens($($group_tokens_val)*)
+            _identifier_token($($identifier_token_val)*)
             _statements($($statements_val)*)
             _literals($($literals_val)*)
             _precedence_type($($precedence_type_val)*)
@@ -564,6 +658,7 @@ mod _parse_statement {
     (
         _token_type($($token_type_val:tt)*)
         _group_tokens($($group_tokens_val:tt)*)
+        _identifier_token($($identifier_token_val:tt)*)
         _statements($($statements_val:tt)*)
         _literals($($literals_val:tt)*)
         _precedence_type($($precedence_type_val:tt)*)
@@ -576,6 +671,7 @@ mod _parse_statement {
         parser_impl!(
             _token_type($($token_type_val)*)
             _group_tokens($($group_tokens_val)*)
+            _identifier_token($($identifier_token_val)*)
             _statements($($statements_val)*)
             _literals($($literals_val)*)
             _precedence_type($($precedence_type_val)*)
@@ -590,6 +686,7 @@ mod _parse_statement {
     (
         _token_type($($token_type_val:tt)*)
         _group_tokens($($group_tokens_val:tt)*)
+        _identifier_token($($identifier_token_val:tt)*)
         _statements($($statements_val:tt)*)
         _literals($($literals_val:tt)*)
         _precedence_type($($precedence_type_val:tt)*)
@@ -603,6 +700,7 @@ mod _parse_statement {
         parser_impl!(
             _token_type($($token_type_val)*)
             _group_tokens($($group_tokens_val)*)
+            _identifier_token($($identifier_token_val)*)
             _statements($($statements_val)*)
             _literals($($literals_val)*)
             _precedence_type($($precedence_type_val)*)
@@ -614,6 +712,7 @@ mod _parse_statement {
     (
         _token_type($($token_type_val:tt)*)
         _group_tokens($($group_tokens_val:tt)*)
+        _identifier_token($($identifier_token_val:tt)*)
         _statements($($statements_val:tt)*)
         _literals($($literals_val:tt)*)
         _precedence_type($($precedence_type_val:tt)*)
@@ -626,6 +725,7 @@ mod _parse_statement {
         parser_impl!(
             _token_type($($token_type_val)*)
             _group_tokens($($group_tokens_val)*)
+            _identifier_token($($identifier_token_val)*)
             _statements($($statements_val)*)
             _literals($($literals_val)*)
             _precedence_type($($precedence_type_val)*)
@@ -642,10 +742,11 @@ macro_rules! parser {
         parser_impl!(
             _token_type()
             _group_tokens()
+            _identifier_token()
             _statements()
             _literals()
-            _precedence_type(::$crate::parse::precedence::StandardPrecedence)
-            _prefix(::$crate::parse::precedence::StandardPrecedence::Prefix)([])
+            _precedence_type($crate::parse::precedence::StandardPrecedence)
+            _prefix($crate::parse::precedence::StandardPrecedence::Prefix)([])
             _infix([])
             $($all)*
         );
@@ -659,7 +760,10 @@ mod simple_calc {
 
 
     mod lexer {
-        use lex::rules::{PTN_INT, convert_int};
+        use lex::rules::{
+            PTN_INT, convert_int,
+            PTN_IDENTIFIER, convert_identifier,
+        };
 
         lexer![
             r"\("                                   => LParen,
@@ -667,6 +771,7 @@ mod simple_calc {
             r"\+"                                   => Plus,
             r"\*"                                   => Asterisk,
             PTN_INT         => convert_int          => IntLiteral<i64>,
+            PTN_IDENTIFIER  => convert_identifier   => Identifier<String>,
         ];
     }
 
@@ -678,11 +783,12 @@ mod simple_calc {
             token_type: Token,
             group_tokens: (Token::LParen, Token::RParen),
             statements: [
-                ExpressionStmt(expression<value>) := {expression<value>}
+                ExpressionStmt(expression<value>) := {expression<value>},
             ],
             literals: [
                 Token::IntLiteral => Integer<i64>,
             ],
+            identifier_token: Token::Identifier,
             precedence_type: StandardPrecedence,
             prefix<StandardPrecedence::Prefix>: [],
             infix: [
@@ -710,13 +816,17 @@ mod statements {
 
 
     mod lexer {
-        use lex::rules::{PTN_INT, convert_int};
+        use lex::rules::{
+            PTN_INT, convert_int,
+            PTN_IDENTIFIER, convert_identifier,
+        };
         lexer![
             r"\("                                   => LParen,
             r"\)"                                   => RParen,
             r"add"                                  => Add,
             r"to"                                   => To,
             PTN_INT         => convert_int          => IntLiteral<i64>,
+            PTN_IDENTIFIER  => convert_identifier   => Identifier<String>,
         ];
     }
 
@@ -729,11 +839,12 @@ mod statements {
             group_tokens: (Token::LParen, Token::RParen),
             statements: [
                 OtherStmt(expression<value>, expression<operand>) :=
-                    {token<Token::Add> expression<value> token<Token::To> expression<operand>}
+                    {token<Token::Add> expression<value> token<Token::To> expression<operand>},
             ],
             literals: [
                 Token::IntLiteral => Integer<i64>,
             ],
+            identifier_token: Token::Identifier,
             precedence_type: StandardPrecedence,
             prefix<StandardPrecedence::Prefix>: [],
             infix: []

@@ -79,7 +79,10 @@ impl Evaluator {
 mod simple_calc {
 
     mod lexer {
-        use lex::rules::{PTN_INT, convert_int};
+        use lex::rules::{
+            PTN_INT, convert_int,
+            PTN_IDENTIFIER, convert_identifier,
+        };
 
         lexer![
             r"\("                                   => LParen,
@@ -87,6 +90,7 @@ mod simple_calc {
             r"\+"                                   => Plus,
             r"\*"                                   => Asterisk,
             PTN_INT         => convert_int          => IntLiteral<i64>,
+            PTN_IDENTIFIER  => convert_identifier   => Identifier<String>,
         ];
     }
 
@@ -98,11 +102,12 @@ mod simple_calc {
             token_type: Token,
             group_tokens: (Token::LParen, Token::RParen),
             statements: [
-                ExpressionStmt(expression<value>) := {expression<value>}
+                ExpressionStmt(expression<value>) := {expression<value>},
             ],
             literals: [
                 Token::IntLiteral => Integer<i64>,
             ],
+            identifier_token: Token::Identifier,
             precedence_type: StandardPrecedence,
             prefix<StandardPrecedence::Prefix>: [],
             infix: [
@@ -149,6 +154,7 @@ mod simple_calc {
             Expression::Literal(literal)           => eval_literal(literal, evaluator),
             Expression::Infix { op, left, right }  => eval_infix(op, *left, *right, evaluator),
             Expression::Prefix { op: _, right: _ } => panic!("invalid prefix op"),
+            Expression::Identifier(_)              => panic!("invalid identifier"),
         }
     }
     fn eval_literal(literal: Literal, _: &mut Evaluator) -> Value {

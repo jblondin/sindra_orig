@@ -122,12 +122,6 @@ pub const PTN_STRING: &str = concat!(
     "#
 );
 pub fn convert_string(whole: &str, captures: &Captures) -> Result<String> {
-    // TODO FOR JULY 9: AARGH THIS ISN'T GOING TO WORK
-    // I'm going to need to pass in CaptureMatches instead, or preferably .collect() the captures
-    // returned by captures_iter() into my own collection to pass into rule methods so implementers
-    // don't actually need to use the regex crate at all even if they implement their own converters
-    // captures should always have capture group 0, this unwrap is safe
-
     if let Some(string_match) = captures.name("s") {
         let s = string_match.as_str();
 

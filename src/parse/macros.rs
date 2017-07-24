@@ -61,7 +61,7 @@ macro_rules! statement_body {
         let $ident_name = {
             if $state.peek().is_some() {
                 match parse_identifier($state) {
-                    Ok(ident) => ident
+                    Ok(ident) => ident,
                     Err(_) => { return Ok(None); }
                 }
             } else {
