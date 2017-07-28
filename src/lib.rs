@@ -1,3 +1,6 @@
+#![feature(plugin)]
+#![plugin(sindra_plugin)]
+
 #[macro_use] extern crate lazy_static;
 extern crate regex;
 

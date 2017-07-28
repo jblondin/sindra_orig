@@ -1,3 +1,6 @@
+#![feature(plugin)]
+#![plugin(sindra_plugin)]
+
 #[macro_use] extern crate sindra;
 extern crate regex;
 extern crate rustyline;
@@ -40,10 +43,10 @@ mod parser {
         ],
         identifier_token: Token::Identifier,
         precedence_type: StandardPrecedence,
-        prefix<StandardPrecedence::Prefix>: [
+        prefix: (StandardPrecedence::Prefix, [
             Token::Plus     => Plus,
             Token::Minus    => Minus,
-        ],
+        ]),
         infix: [
             Token::Plus     => Add        => StandardPrecedence::Sum,
             Token::Minus    => Subtract   => StandardPrecedence::Sum,

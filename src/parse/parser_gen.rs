@@ -3,23 +3,26 @@
 #[macro_export]
 macro_rules! parser_impl {
     (
-        _token_type($token_type:ty)
-        _group_tokens(($group_token_start:path, $group_token_end:path))
-        _identifier_token($identifier_token:path)
-        _statements([
+        token_type($token_type:ty)
+        group_tokens(($group_token_start:path, $group_token_end:path))
+        identifier_token($identifier_token:path)
+        statements([
             $($statement_name:tt($($statement_args_tt:tt)*)
                 := { $($statement_tt:tt)* },)*
         ])
-        _literals([
+        literals([
             $($literal_token:path => $literal_name:ident<$literal_type:ty>,)*
         ])
-        _precedence_type($precedence_type:ty)
-        _prefix($prefix_precedence:path)([
+        precedence_type($precedence_type:ty)
+        prefix(($prefix_precedence:path, [
             $($prefix_token:path => $prefix_name:ident,)*
-        ])
-        _infix([
+        ]))
+        infix([
             $($infix_token:path => $infix_name:ident => $infix_precedence:expr,)*
         ])
+        postfix(($postfix_precedence:path, [
+            $($postfix_token:path => $postfix_name:ident,)*
+        ]))
     ) => (
 
 use $crate::errors;
@@ -217,7 +220,8 @@ fn peek_precedence<'a>(state: &mut ParserState<'a>) -> $precedence_type {
     }
 }
 
-fn parse_grouped_expression<'a>(state: &mut ParserState<'a>) -> errors::ResOpt<'a, SpannedExpr<'a>> {
+fn parse_grouped_expression<'a>(state: &mut ParserState<'a>)
+        -> errors::ResOpt<'a, SpannedExpr<'a>> {
     let expr = parse_expression(state, <$precedence_type>::lowest())?;
     expect_peek_token(state, &$group_token_end)?;
     // consume group end token
@@ -324,435 +328,28 @@ mod _parse_statement {
 
     ); // end main macro implementation arm
 
-    // setting token type
-    (
-        _token_type($($token_type_val:tt)*)
-        _group_tokens($($group_tokens_val:tt)*)
-        _identifier_token($($identifier_token_val:tt)*)
-        _statements($($statements_val:tt)*)
-        _literals($($literals_val:tt)*)
-        _precedence_type($($precedence_type_val:tt)*)
-        _prefix($($prefix_precedence_val:tt)*)($($prefix_val:tt)*)
-        _infix($($infix_val:tt)*)
-        token_type: $token_type:ty,
-        $($suffix:tt)*
-    ) => (
-        parser_impl!(
-            _token_type($token_type)
-            _group_tokens($($group_tokens_val)*)
-            _identifier_token($($identifier_token_val)*)
-            _statements($($statements_val)*)
-            _literals($($literals_val)*)
-            _precedence_type($($precedence_type_val)*)
-            _prefix($($prefix_precedence_val)*)($($prefix_val)*)
-            _infix($($infix_val)*)
-            $($suffix)*
-        );
-    );
-    (
-        _token_type($($token_type_val:tt)*)
-        _group_tokens($($group_tokens_val:tt)*)
-        _identifier_token($($identifier_token_val:tt)*)
-        _statements($($statements_val:tt)*)
-        _literals($($literals_val:tt)*)
-        _precedence_type($($precedence_type_val:tt)*)
-        _prefix($($prefix_precedence_val:tt)*)($($prefix_val:tt)*)
-        _infix($($infix_val:tt)*)
-        token_type: $token_type:ty
-    ) => (
-        parser_impl!(
-            _token_type($token_type)
-            _group_tokens($($group_tokens_val)*)
-            _identifier_token($($identifier_token_val)*)
-            _statements($($statements_val)*)
-            _literals($($literals_val)*)
-            _precedence_type($($precedence_type_val)*)
-            _prefix($($prefix_precedence_val)*)($($prefix_val)*)
-            _infix($($infix_val)*)
-        );
-    );
-
-    // setting group tokens
-    (
-        _token_type($($token_type_val:tt)*)
-        _group_tokens($($group_tokens_val:tt)*)
-        _identifier_token($($identifier_token_val:tt)*)
-        _statements($($statements_val:tt)*)
-        _literals($($literals_val:tt)*)
-        _precedence_type($($precedence_type_val:tt)*)
-        _prefix($($prefix_precedence_val:tt)*)($($prefix_val:tt)*)
-        _infix($($infix_val:tt)*)
-        group_tokens: ($group_token_start:path, $group_token_end:path),
-        $($suffix:tt)*
-    ) => (
-        parser_impl!(
-            _token_type($($token_type_val)*)
-            _group_tokens(($group_token_start, $group_token_end))
-            _identifier_token($($identifier_token_val)*)
-            _statements($($statements_val)*)
-            _literals($($literals_val)*)
-            _precedence_type($($precedence_type_val)*)
-            _prefix($($prefix_precedence_val)*)($($prefix_val)*)
-            _infix($($infix_val)*)
-            $($suffix)*
-        );
-    );
-    (
-        _token_type($($token_type_val:tt)*)
-        _group_tokens($($group_tokens_val:tt)*)
-        _identifier_token($($identifier_token_val:tt)*)
-        _statements($($statements_val:tt)*)
-        _literals($($literals_val:tt)*)
-        _precedence_type($($precedence_type_val:tt)*)
-        _prefix($($prefix_precedence_val:tt)*)($($prefix_val:tt)*)
-        _infix($($infix_val:tt)*)
-        group_tokens: ($group_token_start:path, $group_token_end:path)
-    ) => (
-        parser_impl!(
-            _token_type($($token_type_val)*)
-            _group_tokens(($group_token_start, $group_token_end))
-            _identifier_token($($identifier_token_val)*)
-            _statements($($statements_val)*)
-            _literals($($literals_val)*)
-            _precedence_type($($precedence_type_val)*)
-            _prefix($($prefix_precedence_val)*)($($prefix_val)*)
-            _infix($($infix_val)*)
-        );
-    );
-
-    // setting identifier type
-    (
-        _token_type($($token_type_val:tt)*)
-        _group_tokens($($group_tokens_val:tt)*)
-        _identifier_token($($identifier_token_val:tt)*)
-        _statements($($statements_val:tt)*)
-        _literals($($literals_val:tt)*)
-        _precedence_type($($precedence_type_val:tt)*)
-        _prefix($($prefix_precedence_val:tt)*)($($prefix_val:tt)*)
-        _infix($($infix_val:tt)*)
-        identifier_token: $identifier_token:path,
-        $($suffix:tt)*
-    ) => (
-        parser_impl!(
-            _token_type($($token_type_val)*)
-            _group_tokens($($group_tokens_val)*)
-            _identifier_token($identifier_token)
-            _statements($($statements_val)*)
-            _literals($($literals_val)*)
-            _precedence_type($($precedence_type_val)*)
-            _prefix($($prefix_precedence_val)*)($($prefix_val)*)
-            _infix($($infix_val)*)
-            $($suffix)*
-        );
-    );
-    (
-        _token_type($($token_type_val:tt)*)
-        _group_tokens($($group_tokens_val:tt)*)
-        _identifier_token($($identifier_token_val:tt)*)
-        _statements($($statements_val:tt)*)
-        _literals($($literals_val:tt)*)
-        _precedence_type($($precedence_type_val:tt)*)
-        _prefix($($prefix_precedence_val:tt)*)($($prefix_val:tt)*)
-        _infix($($infix_val:tt)*)
-        identifier_token: $identifier_token:path
-    ) => (
-        parser_impl!(
-            _token_type($token_type)
-            _group_tokens($($group_tokens_val)*)
-            _identifier_token($identifier_token)
-            _statements($($statements_val)*)
-            _literals($($literals_val)*)
-            _precedence_type($($precedence_type_val)*)
-            _prefix($($prefix_precedence_val)*)($($prefix_val)*)
-            _infix($($infix_val)*)
-        );
-    );
-
-
-    // setting statements
-    (
-        _token_type($($token_type_val:tt)*)
-        _group_tokens($($group_tokens_val:tt)*)
-        _identifier_token($($identifier_token_val:tt)*)
-        _statements($($statements_val:tt)*)
-        _literals($($literals_val:tt)*)
-        _precedence_type($($precedence_type_val:tt)*)
-        _prefix($($prefix_precedence_val:tt)*)($($prefix_val:tt)*)
-        _infix($($infix_val:tt)*)
-        statements: [
-            $($statement_name:tt($($statement_args_tt:tt)*)
-                := { $($statement_tt:tt)* },)*
-        ],
-        $($suffix:tt)*
-    ) => (
-        parser_impl!(
-            _token_type($($token_type_val)*)
-            _group_tokens($($group_tokens_val)*)
-            _identifier_token($($identifier_token_val)*)
-            _statements([$($statement_name($($statement_args_tt)*)
-                := { $($statement_tt)* },)*])
-            _literals($($literals_val)*)
-            _precedence_type($($precedence_type_val)*)
-            _prefix($($prefix_precedence_val)*)($($prefix_val)*)
-            _infix($($infix_val)*)
-            $($suffix)*
-        );
-    );
-    (
-        _token_type($($token_type_val:tt)*)
-        _group_tokens($($group_tokens_val:tt)*)
-        _identifier_token($($identifier_token_val:tt)*)
-        _statements($($statements_val:tt)*)
-        _literals($($literals_val:tt)*)
-        _precedence_type($($precedence_type_val:tt)*)
-        _prefix($($prefix_precedence_val:tt)*)($($prefix_val:tt)*)
-        _infix($($infix_val:tt)*)
-        statements: [
-            $($statement_name:tt($($statement_args_tt:tt)*)
-                := { $($statement_tt:tt)* },)*
-        ]
-    ) => (
-        parser_impl!(
-            _token_type($($token_type_val)*)
-            _group_tokens($($group_tokens_val)*)
-            _identifier_token($($identifier_token_val)*)
-            _statements([$($statement_name($($statement_args_tt)*)
-                := { $($statement_tt)* },)*])
-            _literals($($literals_val)*)
-            _precedence_type($($precedence_type_val)*)
-            _prefix($($prefix_precedence_val)*)($($prefix_val)*)
-            _infix($($infix_val)*)
-        );
-    );
-
-    // setting literals
-    (
-        _token_type($($token_type_val:tt)*)
-        _group_tokens($($group_tokens_val:tt)*)
-        _identifier_token($($identifier_token_val:tt)*)
-        _statements($($statements_val:tt)*)
-        _literals($($literals_val:tt)*)
-        _precedence_type($($precedence_type_val:tt)*)
-        _prefix($($prefix_precedence_val:tt)*)($($prefix_val:tt)*)
-        _infix($($infix_val:tt)*)
-        literals: [
-            $($literal_token:path => $literal_name:ident<$literal_type:ty>,)*
-        ],
-        $($suffix:tt)*
-    ) => (
-        parser_impl!(
-            _token_type($($token_type_val)*)
-            _group_tokens($($group_tokens_val)*)
-            _identifier_token($($identifier_token_val)*)
-            _statements($($statements_val)*)
-            _literals([$($literal_token => $literal_name<$literal_type>,)*])
-            _precedence_type($($precedence_type_val)*)
-            _prefix($($prefix_precedence_val)*)($($prefix_val)*)
-            _infix($($infix_val)*)
-            $($suffix)*
-        );
-    );
-    (
-        _token_type($($token_type_val:tt)*)
-        _group_tokens($($group_tokens_val:tt)*)
-        _identifier_token($($identifier_token_val:tt)*)
-        _statements($($statements_val:tt)*)
-        _literals($($literals_val:tt)*)
-        _precedence_type($($precedence_type_val:tt)*)
-        _prefix($($prefix_precedence_val:tt)*)($($prefix_val:tt)*)
-        _infix($($infix_val:tt)*)
-        literals: [
-            $($literal_token:path => $literal_name:ident<$literal_type:ty>,)*
-        ]
-    ) => (
-        parser_impl!(
-            _token_type($($token_type_val)*)
-            _group_tokens($($group_tokens_val)*)
-            _identifier_token($($identifier_token_val)*)
-            _statements($($statements_val)*)
-            _literals([$($literal_token => $literal_name<$literal_type>,)*])
-            _precedence_type($($precedence_type_val)*)
-            _prefix($($prefix_precedence_val)*)($($prefix_val)*)
-            _infix($($infix_val)*)
-        );
-    );
-
-
-    // setting precedence type
-    (
-        _token_type($($token_type_val:tt)*)
-        _group_tokens($($group_tokens_val:tt)*)
-        _identifier_token($($identifier_token_val:tt)*)
-        _statements($($statements_val:tt)*)
-        _literals($($literals_val:tt)*)
-        _precedence_type($($precedence_type_val:tt)*)
-        _prefix($($prefix_precedence_val:tt)*)($($prefix_val:tt)*)
-        _infix($($infix_val:tt)*)
-        precedence_type: $precedence_type:ty,
-        $($suffix:tt)*
-    ) => (
-        parser_impl!(
-            _token_type($($token_type_val)*)
-            _group_tokens($($group_tokens_val)*)
-            _identifier_token($($identifier_token_val)*)
-            _statements($($statements_val)*)
-            _literals($($literals_val)*)
-            _precedence_type($precedence_type)
-            _prefix($($prefix_precedence_val)*)($($prefix_val)*)
-            _infix($($infix_val)*)
-            $($suffix)*
-        );
-    );
-    (
-        _token_type($($token_type_val:tt)*)
-        _group_tokens($($group_tokens_val:tt)*)
-        _identifier_token($($identifier_token_val:tt)*)
-        _statements($($statements_val:tt)*)
-        _literals($($literals_val:tt)*)
-        _precedence_type($($precedence_type_val:tt)*)
-        _prefix($($prefix_precedence_val:tt)*)($($prefix_val:tt)*)
-        _infix($($infix_val:tt)*)
-        precedence_type: $precedence_type:ty
-    ) => (
-        parser_impl!(
-            _token_type($($token_type_val)*)
-            _group_tokens($($group_tokens_val)*)
-            _identifier_token($($identifier_token_val)*)
-            _statements($($statements_val)*)
-            _literals($($literals_val)*)
-            _precedence_type($precedence_type)
-            _prefix($($prefix_precedence_val)*)($($prefix_val)*)
-            _infix($($infix_val)*)
-        );
-    );
-
-    // setting prefix expressions
-    (
-        _token_type($($token_type_val:tt)*)
-        _group_tokens($($group_tokens_val:tt)*)
-        _identifier_token($($identifier_token_val:tt)*)
-        _statements($($statements_val:tt)*)
-        _literals($($literals_val:tt)*)
-        _precedence_type($($precedence_type_val:tt)*)
-        _prefix($($prefix_precedence_val:tt)*)($($prefix_val:tt)*)
-        _infix($($infix_val:tt)*)
-        prefix<$prefix_precedence:path>: [
-            $($prefix_token:path => $prefix_name:ident,)*
-        ],
-        $($suffix:tt)*
-    ) => (
-        parser_impl!(
-            _token_type($($token_type_val)*)
-            _group_tokens($($group_tokens_val)*)
-            _identifier_token($($identifier_token_val)*)
-            _statements($($statements_val)*)
-            _literals($($literals_val)*)
-            _precedence_type($($precedence_type_val)*)
-            _prefix($prefix_precedence)([
-                $($prefix_token => $prefix_name,)*
-            ])
-            _infix($($infix_val)*)
-            $($suffix)*
-        );
-    );
-    (
-        _token_type($($token_type_val:tt)*)
-        _group_tokens($($group_tokens_val:tt)*)
-        _identifier_token($($identifier_token_val:tt)*)
-        _statements($($statements_val:tt)*)
-        _literals($($literals_val:tt)*)
-        _precedence_type($($precedence_type_val:tt)*)
-        _prefix($($prefix_precedence_val:tt)*)($($prefix_val:tt)*)
-        _infix($($infix_val:tt)*)
-        prefix<$prefix_precedence:path>: [
-            $($prefix_token:path => $prefix_name:ident,)*
-        ]
-    ) => (
-        parser_impl!(
-            _token_type($($token_type_val)*)
-            _group_tokens($($group_tokens_val)*)
-            _identifier_token($($identifier_token_val)*)
-            _statements($($statements_val)*)
-            _literals($($literals_val)*)
-            _precedence_type($($precedence_type_val)*)
-            _prefix($prefix_precedence)([
-                $($prefix_token => $prefix_name,)*
-            ])
-            _infix($($infix_val)*)
-        );
-    );
-
-    // setting infix expressions
-    (
-        _token_type($($token_type_val:tt)*)
-        _group_tokens($($group_tokens_val:tt)*)
-        _identifier_token($($identifier_token_val:tt)*)
-        _statements($($statements_val:tt)*)
-        _literals($($literals_val:tt)*)
-        _precedence_type($($precedence_type_val:tt)*)
-        _prefix($($prefix_precedence_val:tt)*)($($prefix_val:tt)*)
-        _infix($($infix_val:tt)*)
-        infix: [
-            $($infix_token:path => $infix_name:ident => $infix_precedence:expr,)*
-        ],
-        $($suffix:tt)*
-    ) => (
-        parser_impl!(
-            _token_type($($token_type_val)*)
-            _group_tokens($($group_tokens_val)*)
-            _identifier_token($($identifier_token_val)*)
-            _statements($($statements_val)*)
-            _literals($($literals_val)*)
-            _precedence_type($($precedence_type_val)*)
-            _prefix($($prefix_precedence_val)*)($($prefix_val)*)
-            _infix([$($infix_token => $infix_name => $infix_precedence,)*])
-            $($suffix)*
-        );
-    );
-    (
-        _token_type($($token_type_val:tt)*)
-        _group_tokens($($group_tokens_val:tt)*)
-        _identifier_token($($identifier_token_val:tt)*)
-        _statements($($statements_val:tt)*)
-        _literals($($literals_val:tt)*)
-        _precedence_type($($precedence_type_val:tt)*)
-        _prefix($($prefix_precedence_val:tt)*)($($prefix_val:tt)*)
-        _infix($($infix_val:tt)*)
-        infix: [
-            $($infix_token:path => $infix_name:ident => $infix_precedence:expr,)*
-        ]
-    ) => (
-        parser_impl!(
-            _token_type($($token_type_val)*)
-            _group_tokens($($group_tokens_val)*)
-            _identifier_token($($identifier_token_val)*)
-            _statements($($statements_val)*)
-            _literals($($literals_val)*)
-            _precedence_type($($precedence_type_val)*)
-            _prefix($($prefix_precedence_val)*)($($prefix_val)*)
-            _infix([$($infix_token => $infix_name => $infix_precedence,)*])
-        );
-    );
-
 }
 
 #[macro_export]
 macro_rules! parser {
     ($($all:tt)*) => (
-        parser_impl!(
-            _token_type()
-            _group_tokens()
-            _identifier_token()
-            _statements()
-            _literals()
-            _precedence_type($crate::parse::precedence::StandardPrecedence)
-            _prefix($crate::parse::precedence::StandardPrecedence::Prefix)([])
-            _infix([])
+        macro_preparse!(
+            parser_impl,
+            [
+                token_type,
+                group_tokens,
+                identifier_token,
+                statements,
+                literals,
+                precedence_type($crate::parse::precedence::StandardPrecedence),
+                prefix(($crate::parse::precedence::StandardPrecedence::Prefix, [])),
+                infix([]),
+                postfix(($crate::parse::precedence::StandardPrecedence::Postfix, [])),
+            ],
             $($all)*
         );
     );
 }
-
 
 #[cfg(test)]
 #[allow(dead_code)]
@@ -790,7 +387,7 @@ mod simple_calc {
             ],
             identifier_token: Token::Identifier,
             precedence_type: StandardPrecedence,
-            prefix<StandardPrecedence::Prefix>: [],
+            prefix: (StandardPrecedence::Prefix, []),
             infix: [
                 Token::Asterisk => Multiply   => StandardPrecedence::Product,
                 Token::Plus     => Add        => StandardPrecedence::Sum,
@@ -846,7 +443,7 @@ mod statements {
             ],
             identifier_token: Token::Identifier,
             precedence_type: StandardPrecedence,
-            prefix<StandardPrecedence::Prefix>: [],
+            prefix: (StandardPrecedence::Prefix, []),
             infix: []
         ];
     }
@@ -861,3 +458,4 @@ mod statements {
         println!("{:?}", ast);
     }
 }
+

@@ -4,15 +4,16 @@ pub trait Lowest {
 
 #[derive(PartialEq, PartialOrd, Debug, Clone, Copy)]
 pub enum StandardPrecedence {
-    Lowest          = 1,
-    Equals          = 2,
-    LessGreater     = 3,
-    Sum             = 4,
-    Product         = 5,
-    Power           = 6,
-    Prefix          = 7,
-    Call            = 8,
-    Index           = 9,
+    Lowest          = 1 ,
+    Equals          = 2 ,
+    LessGreater     = 3 ,
+    Sum             = 4 ,
+    Product         = 5 ,
+    Power           = 6 ,
+    Prefix          = 7 ,
+    Postfix         = 8 ,
+    Call            = 9 ,
+    Index           = 10,
 }
 impl Lowest for StandardPrecedence {
     fn lowest() -> StandardPrecedence {

@@ -1,0 +1,11 @@
+[package]
+name = "sindra_plugin"
+version = "0.1.0"
+authors = ["Jamie Blondin <jblondin@gmail.com>"]
+workspace = ".."
+
+[lib]
+crate-type = ["dylib"]
+plugin = true
+
+[dependencies]

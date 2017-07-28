@@ -109,7 +109,7 @@ mod simple_calc {
             ],
             identifier_token: Token::Identifier,
             precedence_type: StandardPrecedence,
-            prefix<StandardPrecedence::Prefix>: [],
+            prefix: (StandardPrecedence::Prefix, []),
             infix: [
                 Token::Asterisk => Multiply   => StandardPrecedence::Product,
                 Token::Plus     => Add        => StandardPrecedence::Sum,
