@@ -133,34 +133,100 @@ impl<'a> Precedence for SpannedToken<'a> {
 
 type ParserState<'a> = ::std::iter::Peekable<::std::slice::Iter<'a, SpannedToken<'a>>>;
 
+pub struct ParserCursor<'a> {
+    state: ParserState<'a>,
+    stash: Vec<ParserState<'a>>,
+}
+impl<'a> ParserCursor<'a> {
+    fn next(&mut self) -> Option<&'a SpannedToken<'a>> {
+        self.state.next()
+    }
+    fn has_next(&mut self) -> bool {
+        self.state.peek().is_some()
+    }
+    fn peek(&mut self) -> Option<&&'a SpannedToken<'a>> {
+        self.state.peek()
+    }
+    fn push_stash(&mut self) {
+        self.stash.push(self.state.clone());
+    }
+    fn pop_stash(&mut self) {
+        debug_assert!(!self.stash.is_empty());
+        self.stash.pop();
+    }
+    fn restore_stash(&mut self) {
+        debug_assert!(!self.stash.is_empty());
+        if let Some(stash) = self.stash.pop() {
+            self.state = stash;
+        }
+    }
+}
+
 pub fn parse<'a>(tokens: &'a Vec<SpannedToken<'a>>) -> errors::Result<'a, Program<'a>> {
-    let mut state = tokens.iter().peekable();
+    let mut cursor = ParserCursor { state: tokens.iter().peekable(), stash: vec![] };
     let mut program: Program = Program::new();
-    while state.peek().is_some() {
-        program.push(parse_statement(&mut state)?);
+    while cursor.has_next() {
+        println!("peek: {:?}", cursor.peek());
+        let stmt = parse_statement(&mut cursor)?;
+        println!("stmt: {:?}", stmt);
+        program.push(stmt);
     }
     Ok(program)
 }
 
-fn parse_statement<'a>(state: &mut ParserState<'a>) -> errors::Result<'a, SpannedStatement<'a>> {
-    debug_assert!(state.peek().is_some());
+fn parse_statement<'a>(cursor: &mut ParserCursor<'a>) -> errors::Result<'a, SpannedStatement<'a>> {
+    debug_assert!(cursor.has_next());
     $(
-        match _parse_statement::$statement_name(state)? {
+        // save the stash so we can reverse if statement parse fails
+        cursor.push_stash();
+        match _parse_statement::$statement_name(cursor)? {
             Some(s) => {
+                // we can get rid of the stashed parser state since this statement worked
+                cursor.pop_stash();
                 return Ok(s);
             },
             None => {
+                // this didn't work, so restore the stash
+                cursor.restore_stash();
                 // continue on to try next statement
             }
         }
     )*
+
+    // no statements matched
+    // TOOD: improve error reporting here
+    println!("post-stmt peek: {:?}", cursor.peek());
     Err(errors::Error::nospan(errors::ErrorKind::Parse("no statement found".to_string())))
 }
 
+mod _parse_statement {
+    #[allow(unused_imports)]
+    use super::*;
+
+    $(
+        #[allow(non_snake_case)]
+        pub fn $statement_name<'a>(cursor: &mut ParserCursor<'a>)
+                -> errors::ResOpt<'a, Spanned<'a, Statement<'a>>> {
+            if let Some(&&Spanned { span: start_span, .. }) = cursor.peek() {
+                statement_body!(cursor, $precedence_type; $($statement_tt)*);
+                // there were enough tokens, and they all matched!
+                Ok(Some(Spanned::new(
+                    Statement::$statement_name(statement_binds!($($statement_tt)*)),
+                    start_span
+                )))
+            } else {
+                Ok(None) // end of input
+            }
+        }
+    )*
+}
+
 #[allow(dead_code)]
-fn parse_identifier<'a>(state: &mut ParserState<'a>) -> errors::Result<'a, SpannedIdentifier<'a>> {
-    debug_assert!(state.peek().is_some());
-    let &Spanned { span, item: ref token } = state.next().unwrap();
+fn parse_identifier<'a>(
+    cursor: &mut ParserCursor<'a>
+) -> errors::Result<'a, SpannedIdentifier<'a>> {
+    debug_assert!(cursor.has_next());
+    let &Spanned { span, item: ref token } = cursor.next().unwrap();
     if let $identifier_token(ref ident_name) = *token {
         Ok(Spanned::new(Identifier::new(ident_name), span))
     } else {
@@ -170,11 +236,11 @@ fn parse_identifier<'a>(state: &mut ParserState<'a>) -> errors::Result<'a, Spann
 }
 
 fn parse_expression<'a>(
-    state: &mut ParserState<'a>,
+    cursor: &mut ParserCursor<'a>,
     precedence: $precedence_type,
 ) -> errors::ResOpt<'a, SpannedExpr<'a>> {
-    debug_assert!(state.peek().is_some());
-    let prefix_opt = parse_prefix(state)?;
+    debug_assert!(cursor.has_next());
+    let prefix_opt = parse_prefix(cursor)?;
     if prefix_opt.is_none() {
         return Ok(None);
     }
@@ -184,8 +250,8 @@ fn parse_expression<'a>(
             Ok(Some(prefix_opt.unwrap()))
         } else {
             let mut left_expr = prefix_opt.unwrap();
-            while precedence < peek_precedence(state) {
-                let infix_expr = match parse_infix(state)? {
+            while precedence < peek_precedence(cursor) {
+                let infix_expr = match parse_infix(cursor)? {
                     Some((op, right_expr)) => {
                         let left_span = left_expr.span;
                         Spanned::new(
@@ -208,9 +274,9 @@ fn parse_expression<'a>(
     )
 }
 
-fn peek_precedence<'a>(state: &mut ParserState<'a>) -> $precedence_type {
+fn peek_precedence<'a>(cursor: &mut ParserCursor<'a>) -> $precedence_type {
     // get the precedence of the next token (lowest if no token exists)
-    if let Some(&&ref peek_tok) = state.peek() {
+    if let Some(&&ref peek_tok) = cursor.peek() {
         match peek_tok.precedence() {
             Some(prec) => prec,
             None => <$precedence_type>::lowest(),
@@ -220,20 +286,20 @@ fn peek_precedence<'a>(state: &mut ParserState<'a>) -> $precedence_type {
     }
 }
 
-fn parse_grouped_expression<'a>(state: &mut ParserState<'a>)
+fn parse_grouped_expression<'a>(cursor: &mut ParserCursor<'a>)
         -> errors::ResOpt<'a, SpannedExpr<'a>> {
-    let expr = parse_expression(state, <$precedence_type>::lowest())?;
-    expect_peek_token(state, &$group_token_end)?;
+    let expr = parse_expression(cursor, <$precedence_type>::lowest())?;
+    expect_peek_token(cursor, &$group_token_end)?;
     // consume group end token
-    state.next().unwrap();
+    cursor.next().unwrap();
     Ok(expr)
 }
 
 fn expect_peek_token<'a>(
-    state: &mut ParserState<'a>,
+    cursor: &mut ParserCursor<'a>,
     expected: &$token_type
 ) -> errors::Result<'a, ()> {
-    if let Some(&&ref peek_tok) = state.peek() {
+    if let Some(&&ref peek_tok) = cursor.peek() {
         if peek_tok.spans_item(expected) {
             Ok(())
         } else {
@@ -250,9 +316,9 @@ fn expect_peek_token<'a>(
     }
 }
 
-fn parse_prefix<'a>(state: &mut ParserState<'a>) -> errors::ResOpt<'a, SpannedExpr<'a>> {
-    debug_assert!(state.peek().is_some());
-    let &Spanned { span, item: ref token } = state.next().unwrap();
+fn parse_prefix<'a>(cursor: &mut ParserCursor<'a>) -> errors::ResOpt<'a, SpannedExpr<'a>> {
+    debug_assert!(cursor.has_next());
+    let &Spanned { span, item: ref token } = cursor.next().unwrap();
     match *token {
         // add all the literals as prefixes
         $(
@@ -263,11 +329,11 @@ fn parse_prefix<'a>(state: &mut ParserState<'a>) -> errors::ResOpt<'a, SpannedEx
         // add identifier as prefixes
         $identifier_token(ref s) => Ok(Some(Spanned::new(Expression::Identifier(Identifier::new(s)),
             span))),
-        $group_token_start => Ok(parse_grouped_expression(state)?),
+        $group_token_start => Ok(parse_grouped_expression(cursor)?),
         $(
             $prefix_token => {
                 //FIXME: I think this will break on a input-ending unary prefix operator
-                match parse_expression(state, $prefix_precedence)? {
+                match parse_expression(cursor, $prefix_precedence)? {
                     Some(right) => {
                         // FromToken is always defined at this repetition level, unwrap is safe
                         Ok(Some(Spanned::new(
@@ -285,45 +351,25 @@ fn parse_prefix<'a>(state: &mut ParserState<'a>) -> errors::ResOpt<'a, SpannedEx
         _ => Ok(None)
     }
 }
-fn parse_infix<'a>(state: &mut ParserState<'a>) -> errors::ResOpt<'a, (InfixOp, SpannedExpr<'a>)> {
+fn parse_infix<'a>(
+    cursor: &mut ParserCursor<'a>
+) -> errors::ResOpt<'a, (InfixOp, SpannedExpr<'a>)> {
     // if no peek token, we can't get here (due to peek_precedence), so unwrap is ok
-    debug_assert!(state.peek().is_some());
-    let &&ref spanned_tok = state.peek().unwrap();
+    debug_assert!(cursor.has_next());
+    let &&ref spanned_tok = cursor.peek().unwrap();
     match spanned_tok.item {
         $(
             $infix_token => {
                 // both Precedence and FromToken are defined above for this repeated clause,
                 // so unwraps are safe
                 let curr_precedence = spanned_tok.precedence().unwrap();
-                state.next().unwrap(); // advance tokens
+                cursor.next().unwrap(); // advance tokens
                 let op = InfixOp::from_token(&$infix_token).unwrap();
-                parse_expression(state, curr_precedence).map(|opt| opt.map(|expr| (op, expr)))
+                parse_expression(cursor, curr_precedence).map(|opt| opt.map(|expr| (op, expr)))
             }
         ,)*
         _ => Ok(None)
     }
-}
-
-mod _parse_statement {
-    #[allow(unused_imports)]
-    use super::*;
-
-    $(
-        #[allow(non_snake_case)]
-        pub fn $statement_name<'a>(state: &mut ParserState<'a>)
-                -> errors::ResOpt<'a, Spanned<'a, Statement<'a>>> {
-            if let Some(&&Spanned { span: start_span, .. }) = state.peek() {
-                statement_body!(state, $precedence_type; $($statement_tt)*);
-                // there were enough tokens, and they all matched!
-                Ok(Some(Spanned::new(
-                    Statement::$statement_name(statement_binds!($($statement_tt)*)),
-                    start_span
-                )))
-            } else {
-                Ok(None) // end of input
-            }
-        }
-    )*
 }
 
     ); // end main macro implementation arm
@@ -354,7 +400,6 @@ macro_rules! parser {
 #[cfg(test)]
 #[allow(dead_code)]
 mod simple_calc {
-
 
     mod lexer {
         use lex::rules::{

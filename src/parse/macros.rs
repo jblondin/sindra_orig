@@ -1,32 +1,28 @@
 #[macro_export]
 macro_rules! statement_binds {
-    (_cont identifier<$ident_name:ident>) => (
-        $ident_name
+    (_list($($all:tt)*)) => (
+        ($($all)*)
     );
-    (_cont expression<$expr_name:ident>) => (
-        $expr_name
+    (_list($($all:tt)+) identifier<$ident_name:ident> $($statement_tt:tt)*) => (
+        statement_binds!(_list($($all)* , $ident_name) $($statement_tt)*)
     );
-    (_cont token<$tok:path>) => ();
-    (_cont identifier<$ident_name:ident> $($statement_tt:tt)*) => (
-        $ident_name, statement_binds!(_cont $($statement_tt)*)
+    (_list($($all:tt)+) expression<$expr_name:ident> $($statement_tt:tt)*) => (
+        statement_binds!(_list($($all)* , $expr_name) $($statement_tt)*)
     );
-    (_cont expression<$expr_name:ident> $($statement_tt:tt)*) => (
-        $expr_name, statement_binds!(_cont $($statement_tt)*)
+    (_list($($all:tt)+) token<$tok:path> $($statement_tt:tt)*) => (
+        statement_binds!(_list($($all)*) $($statement_tt)*)
     );
-    (_cont token<$tok:path> $($statement_tt:tt)*) => (
-        statement_binds!(_cont $($statement_tt)*)
+    (_list() identifier<$ident_name:ident> $($statement_tt:tt)*) => (
+        statement_binds!(_list($ident_name) $($statement_tt)*)
     );
-    (identifier<$ident_name:ident>) => (($ident_name));
-    (expression<$expr_name:ident>) => (($expr_name));
-    (token<$tok:path>) => ();
-    (identifier<$ident_name:ident> $($statement_tt:tt)*) => (
-        ($ident_name, statement_binds!(_cont $($statement_tt)*))
+    (_list() expression<$expr_name:ident> $($statement_tt:tt)*) => (
+        statement_binds!(_list($expr_name) $($statement_tt)*)
     );
-    (expression<$expr_name:ident> $($statement_tt:tt)*) => (
-        ($expr_name, statement_binds!(_cont $($statement_tt)*))
+    (_list() token<$tok:path> $($statement_tt:tt)*) => (
+        statement_binds!(_list() $($statement_tt)*)
     );
-    (token<$tok:path> $($statement_tt:tt)*) => (
-        statement_binds!($($statement_tt)*)
+    ($($statement_tt:tt)*) => (
+        statement_binds!(_list() $($statement_tt)*)
     );
 }
 
@@ -56,11 +52,11 @@ macro_rules! statement_args {
 
 #[macro_export]
 macro_rules! statement_body {
-    ($state:ident, $prec_ty:ty; ) => (); // endpoint
-    ($state:ident, $prec_ty:ty; identifier<$ident_name:ident> $($rest:tt)*) => (
+    ($cursor:ident, $prec_ty:ty; ) => (); // endpoint
+    ($cursor:ident, $prec_ty:ty; identifier<$ident_name:ident> $($rest:tt)*) => (
         let $ident_name = {
-            if $state.peek().is_some() {
-                match parse_identifier($state) {
+            if $cursor.has_next() {
+                match parse_identifier($cursor) {
                     Ok(ident) => ident,
                     Err(_) => { return Ok(None); }
                 }
@@ -69,12 +65,12 @@ macro_rules! statement_body {
                 return Ok(None);
             }
         };
-        statement_body!($state, $prec_ty; $($rest)*);
+        statement_body!($cursor, $prec_ty; $($rest)*);
     );
-    ($state:ident, $prec_ty:ty; expression<$expr_name:ident> $($rest:tt)*) => (
+    ($cursor:ident, $prec_ty:ty; expression<$expr_name:ident> $($rest:tt)*) => (
         let $expr_name = {
-            if $state.peek().is_some() {
-                match parse_expression($state, <$prec_ty>::lowest()) {
+            if $cursor.has_next() {
+                match parse_expression($cursor, <$prec_ty>::lowest()) {
                     Ok(expr_opt) => {
                         match expr_opt {
                             Some(expr) => expr,
@@ -88,11 +84,11 @@ macro_rules! statement_body {
                 return Ok(None);
             }
         };
-        statement_body!($state, $prec_ty; $($rest)*);
+        statement_body!($cursor, $prec_ty; $($rest)*);
     );
-    ($state:ident, $prec_ty:ty; token<$tok:path> $($rest:tt)*) => (
+    ($cursor:ident, $prec_ty:ty; token<$tok:path> $($rest:tt)*) => (
         {
-            if let Some(curr_tok) = $state.next() {
+            if let Some(curr_tok) = $cursor.next() {
                 if !curr_tok.spans_item(&$tok)  {
                     // token doesn't match pattern, return none
                     return Ok(None);
@@ -102,7 +98,7 @@ macro_rules! statement_body {
                 return Ok(None);
             }
         }
-        statement_body!($state, $prec_ty; $($rest)*);
+        statement_body!($cursor, $prec_ty; $($rest)*);
     );
 }
 
