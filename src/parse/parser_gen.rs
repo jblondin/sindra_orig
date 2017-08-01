@@ -27,6 +27,7 @@ macro_rules! parser_impl {
 
 use $crate::errors;
 use $crate::span::Spanned;
+use $crate::pprint::PrettyPrint;
 
 use $crate::parse::precedence::Lowest;
 
@@ -166,9 +167,7 @@ pub fn parse<'a>(tokens: &'a Vec<SpannedToken<'a>>) -> errors::Result<'a, Progra
     let mut cursor = ParserCursor { state: tokens.iter().peekable(), stash: vec![] };
     let mut program: Program = Program::new();
     while cursor.has_next() {
-        println!("peek: {:?}", cursor.peek());
         let stmt = parse_statement(&mut cursor)?;
-        println!("stmt: {:?}", stmt);
         program.push(stmt);
     }
     Ok(program)
@@ -195,7 +194,6 @@ fn parse_statement<'a>(cursor: &mut ParserCursor<'a>) -> errors::Result<'a, Span
 
     // no statements matched
     // TOOD: improve error reporting here
-    println!("post-stmt peek: {:?}", cursor.peek());
     Err(errors::Error::nospan(errors::ErrorKind::Parse("no statement found".to_string())))
 }
 
@@ -372,9 +370,72 @@ fn parse_infix<'a>(
     }
 }
 
-    ); // end main macro implementation arm
-
+impl<'a> PrettyPrint for Statement<'a> {
+    fn to_pp_string(&self) -> String {
+        match *self {
+            $(
+                Statement::$statement_name(ref args) => {
+                    format!("{}{}", stringify!($statement_name), args.to_pp_string())
+                }
+            ),*
+        }
+    }
 }
+
+impl<'a> PrettyPrint for Expression<'a> {
+    fn to_pp_string(&self) -> String {
+        match *self {
+            Expression::Literal(ref lit) => lit.to_pp_string(),
+            Expression::Identifier(ref ident) => ident.to_pp_string(),
+            Expression::Infix { ref op, ref left, ref right } => {
+                format!("{}({},{})", op.to_pp_string(), left.to_pp_string(), right.to_pp_string())
+            },
+            Expression::Prefix { ref op, ref right } => {
+                format!("{}({})", op.to_pp_string(), right.to_pp_string())
+            },
+        }
+    }
+}
+
+impl PrettyPrint for InfixOp {
+    fn to_pp_string(&self) -> String {
+        match *self {
+            $(
+                InfixOp::$infix_name => stringify!($infix_name).to_string()
+            ),*
+        }
+    }
+}
+
+impl PrettyPrint for PrefixOp {
+    fn to_pp_string(&self) -> String {
+        match *self {
+            $(
+                PrefixOp::$prefix_name => stringify!($prefix_name).to_string()
+            ),*
+        }
+    }
+}
+
+impl PrettyPrint for Literal {
+    fn to_pp_string(&self) -> String {
+        match *self {
+            $(
+                Literal::$literal_name(ref value) => format!("{}", value)
+            ),*
+        }
+    }
+}
+
+impl PrettyPrint for Identifier {
+    fn to_pp_string(&self) -> String {
+        self.name.clone()
+    }
+}
+
+    ); // end main macro implementation arm
+}
+
 
 #[macro_export]
 macro_rules! parser {

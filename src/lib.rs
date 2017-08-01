@@ -6,6 +6,7 @@ extern crate regex;
 
 pub mod errors;
 pub mod span;
+pub mod pprint;
 
 #[macro_use] pub mod lex;
 #[macro_use] pub mod parse;
