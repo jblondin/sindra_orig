@@ -39,7 +39,7 @@ macro_rules! evaluator {
 
 use $crate::errors;
 use $crate::span::Spanned;
-use $crate::eval::context::Context;
+use $crate::eval::store::Store;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -54,13 +54,13 @@ pub fn eval<'a>(program: $program_type<'a>) -> errors::Result<'a, Value> {
 
 pub struct Evaluator {
     #[allow(dead_code)]
-    context: Context<$ident_type, Value>,
+    store: Store<$ident_type, Value>,
 }
 
 impl Evaluator {
     pub fn new() -> Evaluator {
         Evaluator {
-            context: Context::new(),
+            store: Store::new(),
         }
     }
 
