@@ -166,7 +166,10 @@ impl Evaluator {
         &mut self,
         ident: $ident_type
     ) -> Value {
-        panic!("unimplemented");
+        match self.store.get(ident) {
+            Some(&ref value) => value.clone(),
+            None => Value::Empty
+        }
     }
 
     pub fn eval_assignment(
@@ -174,7 +177,9 @@ impl Evaluator {
         ident: $ident_type,
         expr: Spanned<Expression>
     ) -> Value {
-        panic!("unimplemented");
+        let rvalue = self.eval_expression(expr);
+        self.store.set(ident, rvalue);
+        Value::Empty
     }
 }
 
