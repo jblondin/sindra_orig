@@ -53,68 +53,40 @@ mod parser {
 }
 
 mod evaluator {
-    use super::parser::{Program, Block, Statement};
-    use super::eval_expression;
+    use super::parser::{Program, Block, Statement, Identifier, Expression, InfixOp, PrefixOp,
+        PostfixOp, Literal};
+    use super::{multiply_values, add_values, subtract_values, divide_values, raise, negate_value,
+        posate_value};
 
     evaluator![
         program_type: Program,
         block_type: Block,
-        identifier_type: String,
+        identifier_type: Identifier,
+        expression_type: Expression,
         values: [
-            Float(f64)
+            Literal::Float => Float<f64>
         ],
         eval_statement: [
-            Statement::ExpressionStmt((expr)) => eval_expression((expr))
-        ]
+            Statement::ExpressionStmt(expr) => eval_expression(expr)
+        ],
+        infix: (InfixOp, [
+            InfixOp::Multiply => multiply_values,
+            InfixOp::Add      => add_values,
+            InfixOp::Subtract => subtract_values,
+            InfixOp::Divide   => divide_values,
+            InfixOp::Power    => raise
+        ]),
+        prefix: (PrefixOp, [
+            PrefixOp::Minus   => negate_value,
+            PrefixOp::Plus    => posate_value
+        ]),
+        postfix: (PostfixOp, [])
     ];
 }
 
 use sindra::span::Spanned;
-use self::parser::{Expression, Literal, InfixOp, PrefixOp};
-use self::evaluator::{Evaluator, Value};
+use self::evaluator::{Value};
 
-fn eval_expression(expr: (Spanned<Expression>), evaluator: &mut Evaluator) -> Value {
-    match expr.item {
-        Expression::Literal(literal)           => eval_literal(literal, evaluator),
-        Expression::Infix { op, left, right }  => eval_infix(op, *left, *right, evaluator),
-        Expression::Prefix { op, right }       => eval_prefix(op, *right, evaluator),
-        Expression::Identifier(_)              => panic!("invalid identifier"),
-    }
-}
-fn eval_literal(literal: Literal, _: &mut Evaluator) -> Value {
-    match literal {
-        Literal::Float(f)    => Value::Float(f),
-    }
-}
-fn eval_infix(
-    op: InfixOp,
-    left: Spanned<Expression>,
-    right: Spanned<Expression>,
-    evaluator: &mut Evaluator
-) -> Value {
-    let left_value = eval_expression(left, evaluator);
-    let right_value = eval_expression(right, evaluator);
-
-    match op {
-        InfixOp::Add      => add_values(left_value, right_value),
-        InfixOp::Multiply => multiply_values(left_value, right_value),
-        InfixOp::Subtract => subtract_values(left_value, right_value),
-        InfixOp::Divide   => divide_values(left_value, right_value),
-        InfixOp::Power    => raise(left_value, right_value),
-    }
-}
-fn eval_prefix(
-    op: PrefixOp,
-    right: Spanned<Expression>,
-    evaluator: &mut Evaluator
-) -> Value {
-    let right_value = eval_expression(right, evaluator);
-
-    match op {
-        PrefixOp::Minus      => negate_value(right_value),
-        PrefixOp::Plus       => posate_value(right_value),
-    }
-}
 fn add_values(left: Value, right: Value) -> Value {
     match (left, right) {
         (Value::Float(l), Value::Float(r)) => Value::Float(l + r),
