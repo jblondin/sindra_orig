@@ -25,6 +25,7 @@ macro_rules! parser_impl {
         ]))
     ) => (
 
+use std::fmt;
 use $crate::errors;
 use $crate::span::Spanned;
 use $crate::pprint::PrettyPrint;
@@ -58,6 +59,17 @@ type SpannedStatement<'a> = Spanned<'a, Statement<'a>>;
 pub enum Literal {
     $($literal_name($literal_type),)*
 }
+impl fmt::Display for Literal {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match *self {
+            $(
+                Literal::$literal_name(ref value) => {
+                    write!(f, "{}({})", stringify!($literal_name), value)
+                }
+            ),*
+        }
+    }
+}
 
 #[derive(Debug, Hash, Clone, PartialEq, Eq)]
 pub struct Identifier {
@@ -67,6 +79,11 @@ pub struct Identifier {
 impl Identifier {
     pub fn new<T: AsRef<str>>(name: T) -> Identifier {
         Identifier { name: name.as_ref().to_string() }
+    }
+}
+impl fmt::Display for Identifier {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "{}", self.name)
     }
 }
 #[allow(dead_code)]

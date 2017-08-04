@@ -20,9 +20,9 @@ impl<I, V> Store<I, V> where I: Eq + Hash {
     pub fn set(&mut self, ident: I, value: V) {
         self.curr_frame().insert(ident, value);
     }
-    pub fn get(&mut self, ident: I) -> Option<&V> {
+    pub fn get(&mut self, ident: &I) -> Option<&V> {
         for i in (0..self.stack.len()).rev() {
-            if let Some(ref value) = self.stack[i].get(&ident) {
+            if let Some(ref value) = self.stack[i].get(ident) {
                 return Some(&value);
             }
         }

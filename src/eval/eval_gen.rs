@@ -37,8 +37,8 @@ macro_rules! evaluator {
         ])
     ) => (
 
-use $crate::errors;
-use $crate::span::Spanned;
+use $crate::errors::{Error, Result, ErrorKind};
+use $crate::span::{Span, Spanned};
 use $crate::eval::store::Store;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -48,7 +48,7 @@ pub enum Value {
 }
 
 #[allow(dead_code)]
-pub fn eval<'a>(program: $program_type<'a>) -> errors::Result<'a, Value> {
+pub fn eval<'a>(program: $program_type<'a>) -> Result<'a, Value> {
     Evaluator::new().eval(program)
 }
 
@@ -57,6 +57,11 @@ pub struct Evaluator {
     store: Store<$ident_type, Value>,
 }
 
+fn eval_error<'a, T: AsRef<str>>(msg: T) -> ErrorKind<'a> {
+    ErrorKind::Eval(msg.as_ref().to_string())
+}
+type OpResult = ::std::result::Result<Value, String>;
+
 impl Evaluator {
     pub fn new() -> Evaluator {
         Evaluator {
@@ -64,29 +69,32 @@ impl Evaluator {
         }
     }
 
-    pub fn eval<'a>(&mut self, mut program: $program_type<'a>) -> errors::Result<'a, Value> {
-        Ok(self.eval_block(&mut program))
+    pub fn eval<'a>(&mut self, mut program: $program_type<'a>) -> Result<'a, Value> {
+        self.eval_block(&mut program)
     }
 
-    pub fn eval_block<'a>(&mut self, block: &mut $block_type<'a>) -> Value {
+    pub fn eval_block<'a>(&mut self, block: &mut $block_type<'a>) -> Result<'a, Value> {
         block.reverse();
         self.eval_reversed_block(block)
     }
 
-    pub fn eval_reversed_block<'a>(&mut self, block: &mut $block_type<'a>) -> Value {
+    pub fn eval_reversed_block<'a>(&mut self, block: &mut $block_type<'a>) -> Result<'a, Value> {
         if let Some(first) = block.pop() {
-            let value = self.eval_statement(first);
+            let value = self.eval_statement(first)?;
             if block.is_empty() {
-                value
+                Ok(value)
             } else {
                 self.eval_reversed_block(block)
             }
         } else {
-            Value::Empty
+            Ok(Value::Empty)
         }
     }
 
-    pub fn eval_statement<'a>(&mut self, statement: Spanned<'a, Statement>) -> Value {
+    pub fn eval_statement<'a>(
+        &mut self,
+        statement: Spanned<'a, Statement<'a>>
+    ) -> Result<'a, Value> {
         match statement.item {
             $(
                 $stmt_type::$stmt_variant($($args)*) => {
@@ -96,90 +104,104 @@ impl Evaluator {
         }
     }
 
-    pub fn eval_expression(&mut self, expression: Spanned<Expression>) -> Value {
-        match expression.item {
-            Expression::Literal(literal)           => self.eval_literal(literal),
-            Expression::Infix { op, left, right }  => self.eval_infix(op, *left, *right),
-            Expression::Prefix { op, right }       => self.eval_prefix(op, *right),
-            Expression::Postfix { op, left }       => self.eval_postfix(op, *left),
-            Expression::Identifier(ident)          => self.eval_identifier(ident),
+    pub fn eval_expression<'a>(&mut self, expr: Spanned<'a, Expression<'a>>) -> Result<'a, Value> {
+        let Spanned { item, span: sp } = expr;
+        match item {
+            Expression::Literal(literal)           => self.eval_literal(sp, literal),
+            Expression::Infix { op, left, right }  => self.eval_infix(sp, op, *left, *right),
+            Expression::Prefix { op, right }       => self.eval_prefix(sp, op, *right),
+            Expression::Postfix { op, left }       => self.eval_postfix(sp, op, *left),
+            Expression::Identifier(ident)          => self.eval_identifier(sp, ident),
         }
     }
 
-    pub fn eval_literal(&mut self, literal: Literal) -> Value {
+    pub fn eval_literal<'a>(&mut self, sp: Span<'a>, literal: Literal) -> Result<'a, Value> {
+        #[allow(unreachable_patterns)]
         match literal {
             $(
-                $value_source(value) => Value::$variant(value)
-            ),*
+                $value_source(value) => Ok(Value::$variant(value)),
+            )*
+            _ => Err(Error::spanned(eval_error(format!("unknown literal: '{}'", literal)), sp))
         }
     }
 
-    pub fn eval_infix(
+    pub fn eval_infix<'a>(
         &mut self,
+        sp: Span<'a>,
         op: InfixOp,
-        left: Spanned<Expression>,
-        right: Spanned<Expression>
-    ) -> Value {
+        left: Spanned<'a, Expression<'a>>,
+        right: Spanned<'a, Expression<'a>>
+    ) -> Result<'a, Value> {
         #[allow(unused_variables)]
-        let left_value = self.eval_expression(left);
+        let left_value = self.eval_expression(left)?;
         #[allow(unused_variables)]
-        let right_value = self.eval_expression(right);
+        let right_value = self.eval_expression(right)?;
 
         match op {
             $(
-                $infix_type => $infix_op_fn(left_value, right_value)
+                $infix_type => $infix_op_fn(left_value, right_value).map_err(
+                    |e| Error::spanned(eval_error(e), sp))
             ),*
         }
     }
 
-    pub fn eval_prefix(
+    #[allow(unused_variables)]
+    pub fn eval_prefix<'a>(
         &mut self,
+        sp: Span<'a>,
         op: PrefixOp,
-        right: Spanned<Expression>
-    ) -> Value {
+        right: Spanned<'a, Expression<'a>>
+    ) -> Result<'a, Value> {
         #[allow(unused_variables)]
-        let right_value = self.eval_expression(right);
+        let right_value = self.eval_expression(right)?;
 
         match op {
             $(
-                $prefix_type => $prefix_op_fn(right_value)
+                $prefix_type => $prefix_op_fn(right_value).map_err(
+                    |e| Error::spanned(eval_error(e), sp))
             ),*
         }
     }
 
-    pub fn eval_postfix(
+    #[allow(unused_variables)]
+    pub fn eval_postfix<'a>(
         &mut self,
+        sp: Span<'a>,
         op: PostfixOp,
-        left: Spanned<Expression>
-    ) -> Value {
+        left: Spanned<'a, Expression<'a>>
+    ) -> Result<'a, Value> {
         #[allow(unused_variables)]
-        let left_value = self.eval_expression(left);
+        let left_value = self.eval_expression(left)?;
 
         match op {
             $(
-                $postfix_type => $postfix_op_fn(left_value)
+                $postfix_type => $postfix_op_fn(left_value).map_err(
+                    |e| Error::spanned(eval_error(e), sp))
             ),*
         }
     }
 
-    pub fn eval_identifier(
+    pub fn eval_identifier<'a>(
         &mut self,
+        sp: Span<'a>,
         ident: $ident_type
-    ) -> Value {
-        match self.store.get(ident) {
-            Some(&ref value) => value.clone(),
-            None => Value::Empty
+    ) -> Result<'a, Value> {
+        match self.store.get(&ident) {
+            Some(&ref value) => Ok(value.clone()),
+            None => Err(Error::spanned(eval_error(format!("identifier not found: '{}'", ident)),
+                sp))
         }
     }
 
-    pub fn eval_assignment(
+    #[allow(dead_code)]
+    pub fn eval_assignment<'a>(
         &mut self,
         ident: $ident_type,
-        expr: Spanned<Expression>
-    ) -> Value {
-        let rvalue = self.eval_expression(expr);
+        expr: Spanned<'a, Expression<'a>>
+    ) -> Result<'a, Value> {
+        let rvalue = self.eval_expression(expr)?;
         self.store.set(ident, rvalue);
-        Value::Empty
+        Ok(Value::Empty)
     }
 }
 
@@ -255,16 +277,16 @@ mod simple_calc {
             postfix: (PostfixOp, [])
         ];
 
-        fn add_values(left: Value, right: Value) -> Value {
+        fn add_values(left: Value, right: Value) -> OpResult {
             match (left, right) {
-                (Value::Integer(l), Value::Integer(r)) => Value::Integer(l + r),
-                (_, _) => panic!("invalid add"),
+                (Value::Integer(l), Value::Integer(r)) => Ok(Value::Integer(l + r)),
+                (_, _) => Err("addition only valid between two integers".to_string()),
             }
         }
-        fn multiply_values(left: Value, right: Value) -> Value {
+        fn multiply_values(left: Value, right: Value) -> OpResult {
             match (left, right) {
-                (Value::Integer(l), Value::Integer(r)) => Value::Integer(l * r),
-                (_, _) => panic!("invalid multiply"),
+                (Value::Integer(l), Value::Integer(r)) => Ok(Value::Integer(l * r)),
+                (_, _) => Err("multiplication only valid between two integers".to_string()),
             }
         }
 

@@ -60,8 +60,6 @@ mod parser {
 mod evaluator {
     use super::parser::{Program, Block, Statement, Identifier, Expression, InfixOp, PrefixOp,
         PostfixOp, Literal};
-    use super::{multiply_values, add_values, subtract_values, divide_values, raise, negate_value,
-        posate_value};
 
     evaluator![
         program_type: Program,
@@ -88,54 +86,53 @@ mod evaluator {
         ]),
         postfix: (PostfixOp, [])
     ];
+
+    fn add_values(left: Value, right: Value) -> OpResult {
+        match (left, right) {
+            (Value::Float(l), Value::Float(r)) => Ok(Value::Float(l + r)),
+            (_, _) => Err("addition only valid between two floats".to_string()),
+        }
+    }
+    fn subtract_values(left: Value, right: Value) -> OpResult {
+        match (left, right) {
+            (Value::Float(l), Value::Float(r)) => Ok(Value::Float(l - r)),
+            (_, _) => Err("subtraction only valid between two floats".to_string()),
+        }
+    }
+    fn multiply_values(left: Value, right: Value) -> OpResult {
+        match (left, right) {
+            (Value::Float(l), Value::Float(r)) => Ok(Value::Float(l * r)),
+            (_, _) => Err("multiplication only valid between two floats".to_string()),
+        }
+    }
+    fn divide_values(left: Value, right: Value) -> OpResult {
+        match (left, right) {
+            (Value::Float(l), Value::Float(r)) => Ok(Value::Float(l / r)),
+            (_, _) => Err("division only valid between two floats".to_string()),
+        }
+    }
+    fn raise(left: Value, right: Value) -> OpResult {
+        match (left, right) {
+            (Value::Float(l), Value::Float(r)) => Ok(Value::Float(l.powf(r))),
+            (_, _) => Err("raising only valid between two floats".to_string()),
+        }
+    }
+    fn negate_value(right: Value) -> OpResult {
+        match right {
+            Value::Float(r) => Ok(Value::Float(-r)),
+            _ => Err("unary negation only valid for floats".to_string())
+        }
+    }
+    fn posate_value(right: Value) -> OpResult {
+        match right {
+            Value::Float(r) => Ok(Value::Float(r)),
+            _ => Err("unary posation only valid for floats".to_string())
+        }
+    }
+
 }
 
-use self::evaluator::{Evaluator, Value};
-
-fn add_values(left: Value, right: Value) -> Value {
-    match (left, right) {
-        (Value::Float(l), Value::Float(r)) => Value::Float(l + r),
-        (_, _) => panic!("invalid add"),
-    }
-}
-fn subtract_values(left: Value, right: Value) -> Value {
-    match (left, right) {
-        (Value::Float(l), Value::Float(r)) => Value::Float(l - r),
-        (_, _) => panic!("invalid add"),
-    }
-}
-fn multiply_values(left: Value, right: Value) -> Value {
-    match (left, right) {
-        (Value::Float(l), Value::Float(r)) => Value::Float(l * r),
-        (_, _) => panic!("invalid multiply"),
-    }
-}
-fn divide_values(left: Value, right: Value) -> Value {
-    match (left, right) {
-        (Value::Float(l), Value::Float(r)) => Value::Float(l / r),
-        (_, _) => panic!("invalid add"),
-    }
-}
-fn raise(left: Value, right: Value) -> Value {
-    match (left, right) {
-        (Value::Float(l), Value::Float(r)) => Value::Float(l.powf(r)),
-        (_, _) => panic!("invalid raise"),
-    }
-}
-fn negate_value(right: Value) -> Value {
-    match right {
-        Value::Float(r) => Value::Float(-r),
-        _ => panic!("invalid unary minus")
-    }
-}
-fn posate_value(right: Value) -> Value {
-    match right {
-        Value::Float(r) => Value::Float(r),
-        _ => panic!("invalid unary plus")
-    }
-}
-
-interp_repl!(lexer: lexer::lex, parser: parser::parse, evaluator: Evaluator);
+interp_repl!(lexer: lexer::lex, parser: parser::parse, evaluator: evaluator::Evaluator);
 
 fn main() {
     start("SimpleCalc", "0.0.1");
