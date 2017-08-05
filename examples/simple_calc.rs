@@ -21,6 +21,7 @@ mod lexer {
         r"/"                                    => Slash,
         r"\*"                                   => Asterisk,
         r"\^"                                   => Caret,
+        r"="                                    => Equal,
         PTN_NUM         => convert_num          => NumLiteral<f64>,
         PTN_STRING      => convert_string       => StrLiteral<String>,
         PTN_IDENTIFIER  => convert_identifier   => Identifier<String>,
@@ -39,6 +40,9 @@ mod parser {
             Token::StrLiteral => Str<String>,
         ],
         statements: [
+            AssignmentStmt(identifier<name>, expression<value>) := {
+                identifier<name> token<Token::Equal> expression<value>
+            },
             ExpressionStmt(expression<value>) := {expression<value>},
         ],
         identifier_token: Token::Identifier,
@@ -71,6 +75,7 @@ mod evaluator {
             Literal::Str   => String<String>
         ],
         eval_statement: [
+            Statement::AssignmentStmt((ident, expr)) => eval_assignment(ident, expr),
             Statement::ExpressionStmt(expr) => eval_expression(expr)
         ],
         infix: (InfixOp, [

@@ -196,7 +196,7 @@ impl Evaluator {
         ident: $ident_type
     ) -> Result<'a, Value> {
         match self.store.get(&ident) {
-            Some(&ref value) => Ok(value.clone()),
+            Some(value) => Ok(value),
             None => Err(Error::spanned(eval_error(format!("identifier not found: '{}'", ident)),
                 sp))
         }
