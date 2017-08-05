@@ -125,6 +125,16 @@ impl FromToken<$token_type> for PrefixOp {
         }
     }
 }
+impl fmt::Display for PrefixOp {
+    #[allow(unused_variables)]
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match *self {
+            $(
+                PrefixOp::$prefix_name =>  write!(f, "{}", stringify!($prefix_name))
+            ),*
+        }
+    }
+}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum InfixOp {
@@ -147,6 +157,16 @@ impl FromToken<$token_type> for InfixOp {
         }
     }
 }
+impl fmt::Display for InfixOp {
+    #[allow(unused_variables)]
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match *self {
+            $(
+                InfixOp::$infix_name =>  write!(f, "{}", stringify!($infix_name))
+            ),*
+        }
+    }
+}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum PostfixOp {
@@ -157,6 +177,16 @@ impl FromToken<$token_type> for PostfixOp {
         match *tok {
             $($postfix_token => Some(PostfixOp::$postfix_name),)*
             _ => None
+        }
+    }
+}
+impl fmt::Display for PostfixOp {
+    #[allow(unused_variables)]
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match *self {
+            $(
+                PostfixOp::$postfix_name =>  write!(f, "{}", stringify!($postfix_name))
+            ),*
         }
     }
 }

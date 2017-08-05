@@ -137,11 +137,14 @@ impl Evaluator {
         #[allow(unused_variables)]
         let right_value = self.eval_expression(right)?;
 
+        #[allow(unreachable_patterns)]
         match op {
             $(
                 $infix_type => $infix_op_fn(left_value, right_value).map_err(
-                    |e| Error::spanned(eval_error(e), sp))
-            ),*
+                    |e| Error::spanned(eval_error(e), sp)),
+            )*
+            _ => Err(Error::spanned(eval_error(
+                format!("unhandled infix operator: '{}'", op)), sp))
         }
     }
 
@@ -155,11 +158,14 @@ impl Evaluator {
         #[allow(unused_variables)]
         let right_value = self.eval_expression(right)?;
 
+        #[allow(unreachable_patterns)]
         match op {
             $(
                 $prefix_type => $prefix_op_fn(right_value).map_err(
-                    |e| Error::spanned(eval_error(e), sp))
-            ),*
+                    |e| Error::spanned(eval_error(e), sp)),
+            )*
+            _ => Err(Error::spanned(eval_error(
+                format!("unhandled prefix operator: '{}'", op)), sp))
         }
     }
 
@@ -173,11 +179,14 @@ impl Evaluator {
         #[allow(unused_variables)]
         let left_value = self.eval_expression(left)?;
 
+        #[allow(unreachable_patterns)]
         match op {
             $(
                 $postfix_type => $postfix_op_fn(left_value).map_err(
-                    |e| Error::spanned(eval_error(e), sp))
-            ),*
+                    |e| Error::spanned(eval_error(e), sp)),
+            )*
+            _ => Err(Error::spanned(eval_error(
+                format!("unhandled postfix operator: '{}'", op)), sp))
         }
     }
 
@@ -196,11 +205,11 @@ impl Evaluator {
     #[allow(dead_code)]
     pub fn eval_assignment<'a>(
         &mut self,
-        ident: $ident_type,
+        ident: Spanned<'a, $ident_type>,
         expr: Spanned<'a, Expression<'a>>
     ) -> Result<'a, Value> {
         let rvalue = self.eval_expression(expr)?;
-        self.store.set(ident, rvalue);
+        self.store.set(ident.item, rvalue);
         Ok(Value::Empty)
     }
 }
