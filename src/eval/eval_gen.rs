@@ -69,16 +69,32 @@ impl Evaluator {
         }
     }
 
-    pub fn eval<'a>(&mut self, mut program: $program_type<'a>) -> Result<'a, Value> {
-        self.eval_block(&mut program)
+    pub fn eval<'a>(&mut self, program: $program_type<'a>) -> Result<'a, Value> {
+        self.eval_block_nopush(program)
     }
 
-    pub fn eval_block<'a>(&mut self, block: &mut $block_type<'a>) -> Result<'a, Value> {
+    pub fn eval_block<'a>(
+        &mut self,
+        sp: Span<'a>,
+        block: $block_type<'a>
+    ) -> Result<'a, Value> {
+        self.store.push();
+        let ret = self.eval_block_nopush(block);
+        match self.store.pop() {
+            Some(parent_store) => { self.store = *parent_store; },
+            None => {
+                return Err(Error::spanned(eval_error("invalid descoping"), sp));
+            }
+        }
+        ret
+    }
+
+    pub fn eval_block_nopush<'a>(&mut self, mut block: $block_type<'a>) -> Result<'a, Value> {
         block.reverse();
         self.eval_reversed_block(block)
     }
 
-    pub fn eval_reversed_block<'a>(&mut self, block: &mut $block_type<'a>) -> Result<'a, Value> {
+    pub fn eval_reversed_block<'a>(&mut self, mut block: $block_type<'a>) -> Result<'a, Value> {
         if let Some(first) = block.pop() {
             let value = self.eval_statement(first)?;
             if block.is_empty() {
@@ -112,6 +128,7 @@ impl Evaluator {
             Expression::Prefix { op, right }       => self.eval_prefix(sp, op, *right),
             Expression::Postfix { op, left }       => self.eval_postfix(sp, op, *left),
             Expression::Identifier(ident)          => self.eval_identifier(sp, ident),
+            Expression::Block(block)               => self.eval_block(sp, block),
         }
     }
 

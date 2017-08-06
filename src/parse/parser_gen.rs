@@ -109,7 +109,9 @@ pub enum Expression<'a> {
     Postfix {
         op: PostfixOp,
         left: Box<SpannedExpr<'a>>,
-    }
+    },
+    #[allow(dead_code)]
+    Block(Block<'a>),
 }
 type SpannedExpr<'a> = Spanned<'a, Expression<'a>>;
 
@@ -462,6 +464,9 @@ impl<'a> PrettyPrint for Expression<'a> {
             },
             Expression::Postfix { ref op, ref left } => {
                 format!("{}({})", op.to_pp_string(), left.to_pp_string())
+            },
+            Expression::Block(ref block) => {
+                block.to_pp_string()
             }
         }
     }

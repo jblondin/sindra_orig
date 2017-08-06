@@ -32,6 +32,15 @@ impl<I, V> Store<I, V> where I: Eq + Hash, V: Clone {
             parent: Some(Box::new(parent.clone()))
         }
     }
+    pub fn push(&self) -> Store<I, V> {
+        Store::new_child(self)
+    }
+    pub fn pop(&self) -> Option<Box<Store<I, V>>> {
+        match self.parent {
+            Some(ref boxed) => Some((*boxed).clone()),
+            None => None
+        }
+    }
 
     pub fn set(&self, ident: I, value: V) {
         self.frame.borrow_mut().insert(ident, value);
