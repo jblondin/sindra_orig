@@ -135,17 +135,17 @@ impl<'a> Lexer<'a> {
             // try to lex the next token
             let (token, matched) = self.lex_token(&self.input[curr_pos.byte..], &regex_list, &set)
                 .map_err(|lte| errors::Error::spanned(errors::ErrorKind::LexToken(lte),
-                    Span::new(self.input, curr_pos)))?;
+                    Span::new_from(&self.input, curr_pos)))?;
             let offset = Offset::from_str(matched);
             if offset.nbytes() == 0 {
                 return Err(errors::Error::spanned(errors::ErrorKind::Lex(
                     "Regex error: 0-length string matched".to_string()),
-                    Span::new(self.input, curr_pos)));
+                    Span::new_from(&self.input, curr_pos)));
             }
             let prev_pos = curr_pos;
             curr_pos.offset(&offset);
             tokens.push(Spanned::new(token,
-                Span::new(&self.input[prev_pos.byte..curr_pos.byte], prev_pos)));
+                Span::new(&self.input, prev_pos, curr_pos)));
         }
         Ok(tokens)
     }

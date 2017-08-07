@@ -27,7 +27,7 @@ impl<'a> fmt::Display for Error<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.span {
             Some(span) => write!(f, "{} at line {}, column {}: {}",
-                (self as &std::error::Error).description(), span.pos.row, span.pos.column,
+                (self as &std::error::Error).description(), span.start.row, span.start.column,
                 self.origin),
             None       => write!(f, "{} (unknown position): {}",
                 (self as &std::error::Error).description(), self.origin),
@@ -58,7 +58,7 @@ impl<'a> fmt::Display for MultiError<'a> {
         for err in &self.errors {
             match err.span {
                 Some(span) => write!(f, "\n{} at line {}, column {}: {}",
-                    (err as &std::error::Error).description(), span.pos.row, span.pos.column,
+                    (err as &std::error::Error).description(), span.start.row, span.start.column,
                     err.origin)?,
                 None       => write!(f, "\n{} (unknown position): {}",
                     (err as &std::error::Error).description(), err.origin)?,

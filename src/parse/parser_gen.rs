@@ -1,10 +1,47 @@
-//TODO:
-// * remove reliance on precedence_type
+#[macro_export]
+macro_rules! group_tokens {
+    ($token_type:ty: None) => (
+
+impl $token_type {
+    fn group_token_start() -> Option<Self> { None }
+    fn group_token_end() -> Option<Self> { None }
+}
+
+    );
+    ($token_type:ty: $group_token_start:path, $group_token_end:path) => (
+
+impl $token_type {
+    fn group_token_start() -> Option<Self> { Some($group_token_start) }
+    fn group_token_end() -> Option<Self> { Some($group_token_end) }
+}
+
+    );
+}
+
+#[macro_export]
+macro_rules! block_tokens {
+    ($token_type:ty: None) => (
+
+impl $token_type {
+    fn block_token_start() -> Option<Self> { None }
+    fn block_token_end() -> Option<Self> { None }
+}
+
+    );
+    ($token_type:ty: $block_token_start:path, $block_token_end:path) => (
+
+impl $token_type {
+    fn block_token_start() -> Option<Self> { Some($block_token_start) }
+    fn block_token_end() -> Option<Self> { Some($block_token_end) }
+}
+
+    );
+}
+
 #[macro_export]
 macro_rules! parser_impl {
     (
         token_type($token_type:ty)
-        group_tokens(($group_token_start:path, $group_token_end:path))
         identifier_token($identifier_token:path)
         statements([
             $($statement_name:tt($($statement_args_tt:tt)*)
@@ -217,6 +254,13 @@ impl<'a> ParserCursor<'a> {
     fn peek(&mut self) -> Option<&&'a SpannedToken<'a>> {
         self.state.peek()
     }
+    fn is_peek_expected(&mut self, expected: &$token_type) -> bool {
+        if let Some(&&ref peek_tok) = self.peek() {
+            peek_tok.spans_item(expected)
+        } else {
+            false
+        }
+    }
     fn push_stash(&mut self) {
         self.stash.push(self.state.clone());
     }
@@ -356,10 +400,35 @@ fn peek_precedence<'a>(cursor: &mut ParserCursor<'a>) -> $precedence_type {
 fn parse_grouped_expression<'a>(cursor: &mut ParserCursor<'a>)
         -> errors::ResOpt<'a, SpannedExpr<'a>> {
     let expr = parse_expression(cursor, <$precedence_type>::lowest())?;
-    expect_peek_token(cursor, &$group_token_end)?;
+    // parse_grouped_expression only called if group_token_* returns Some, this unwrap is safe
+    expect_peek_token(cursor, &<$token_type>::group_token_end().unwrap())?;
     // consume group end token
     cursor.next().unwrap();
     Ok(expr)
+}
+
+fn parse_block<'a>(mut cursor: &mut ParserCursor<'a>) -> errors::ResOpt<'a, SpannedExpr<'a>> {
+    let mut block = Block::new();
+    // parse_block only called if block_token_* returns Some, unwraps are safe
+    let start_span = if cursor.has_next() {
+        cursor.peek().unwrap().span
+    } else {
+        return Err(errors::Error::nospan(errors::ErrorKind::Parse(
+            format!("expected block end token {}, but end of input reached",
+                <$token_type>::block_token_end().unwrap())
+        )));
+    };
+    // parse_block only called if group_tokens() is Some, unwrap is safe
+    while cursor.has_next() && !cursor.is_peek_expected(
+            &<$token_type>::block_token_end().unwrap()) {
+        let stmt = parse_statement(&mut cursor)?;
+        block.push(stmt);
+    }
+    expect_peek_token(cursor, &<$token_type>::block_token_end().unwrap())?;
+    // consume block end token
+    let &Spanned {span: end_span, ..} = cursor.next().unwrap();
+    let full_span = start_span.extend_to(&end_span);
+    Ok(Some(Spanned::new(Expression::Block(block), full_span)))
 }
 
 fn expect_peek_token<'a>(
@@ -396,7 +465,10 @@ fn parse_prefix<'a>(cursor: &mut ParserCursor<'a>) -> errors::ResOpt<'a, Spanned
         // add identifier as prefixes
         $identifier_token(ref s) => Ok(Some(Spanned::new(Expression::Identifier(Identifier::new(s)),
             span))),
-        $group_token_start => Ok(parse_grouped_expression(cursor)?),
+        ref tok if Some(tok) == <$token_type>::group_token_start().as_ref()
+            => Ok(parse_grouped_expression(cursor)?),
+        ref tok if Some(tok) == <$token_type>::block_token_start().as_ref()
+            => Ok(parse_block(cursor)?),
         $(
             $prefix_token => {
                 //FIXME: I think this will break on a input-ending unary prefix operator
@@ -529,7 +601,6 @@ macro_rules! parser {
             parser_impl,
             [
                 token_type,
-                group_tokens,
                 identifier_token,
                 statements,
                 literals,
@@ -567,9 +638,11 @@ mod simple_calc {
         use super::lexer::Token;
         use parse::precedence::StandardPrecedence;
 
+        group_tokens![Token: Token::LParen, Token::RParen];
+        block_tokens![Token: None];
+
         parser![
             token_type: Token,
-            group_tokens: (Token::LParen, Token::RParen),
             statements: [
                 ExpressionStmt(expression<value>) := {expression<value>},
             ],
@@ -611,6 +684,8 @@ mod statements {
         lexer![
             r"\("                                   => LParen,
             r"\)"                                   => RParen,
+            r"\{"                                   => LBrace,
+            r"\}"                                   => RBrace,
             r"add"                                  => Add,
             r"to"                                   => To,
             PTN_INT         => convert_int          => IntLiteral<i64>,
@@ -622,9 +697,11 @@ mod statements {
         use super::lexer::Token;
         use parse::precedence::StandardPrecedence;
 
+        group_tokens![Token: Token::LParen, Token::RParen];
+        block_tokens![Token: Token::LBrace, Token::RBrace];
+
         parser![
             token_type: Token,
-            group_tokens: (Token::LParen, Token::RParen),
             statements: [
                 OtherStmt(expression<value>, expression<operand>) :=
                     {token<Token::Add> expression<value> token<Token::To> expression<operand>},

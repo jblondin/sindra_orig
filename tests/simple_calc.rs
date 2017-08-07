@@ -27,9 +27,11 @@ mod parser {
     use super::lexer::Token;
     use sindra::parse::precedence::StandardPrecedence;
 
+    group_tokens![Token: Token::LParen, Token::RParen];
+    block_tokens![Token: None];
+
     parser![
         token_type: Token,
-        group_tokens: (Token::LParen, Token::RParen),
         statements: [
             ExpressionStmt(expression<value>) := {expression<value>},
         ],

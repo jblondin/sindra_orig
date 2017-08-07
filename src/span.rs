@@ -83,24 +83,37 @@ impl Position {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Span<'a> {
     input: &'a str,
-    pub pos: Position,
+    pub start: Position,
+    pub end: Option<Position>,
 }
 
 impl<'a> Span<'a> {
-    pub fn new(input: &'a str, pos: Position) -> Span<'a> {
+    pub fn new(input: &'a str, start: Position, end: Position) -> Span<'a> {
         Span {
-            pos: pos,
             input: input,
+            start: start,
+            end: Some(end)
         }
     }
-    pub fn start(input: &'a str) -> Span<'a> {
-        Span::new(input, Position::start())
+    pub fn new_from(input: &'a str, start: Position) -> Span<'a> {
+        Span {
+            input: input,
+            start: start,
+            end: None
+        }
+    }
+    pub fn extend_to(&self, end_span: &Span<'a>) -> Span<'a> {
+        Span {
+            input: self.input,
+            start: self.start,
+            end: Some(end_span.end.unwrap_or(end_span.start))
+        }
     }
     pub fn as_slice(&self) -> &'a str {
-        self.input
-    }
-    pub fn is_empty(&self) -> bool {
-        self.input.is_empty()
+        match self.end {
+            Some(end) => &self.input[self.start.byte..end.byte],
+            None => &self.input[self.start.byte..]
+        }
     }
 }
 
