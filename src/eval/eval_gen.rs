@@ -284,7 +284,6 @@ mod simple_calc {
     mod evaluator {
         use super::parser::{Program, Block, Statement, Expression, Literal, InfixOp, PrefixOp,
             PostfixOp, Identifier};
-        // use super::eval_expression;
 
         evaluator![
             program_type: Program,
