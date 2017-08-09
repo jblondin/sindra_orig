@@ -263,14 +263,12 @@ mod tests {
     mod lexer {
         use lex::rules::{
             PTN_INT, convert_int,
-            PTN_IDENTIFIER, convert_identifier,
         };
 
         lexer![
             r"\("                                   => LParen,
             r"\)"                                   => RParen,
             PTN_INT         => convert_int          => IntLiteral<i64>,
-            PTN_IDENTIFIER  => convert_identifier   => Identifier<String>,
         ];
     }
 
@@ -279,6 +277,7 @@ mod tests {
 
         group_tokens![Token: Token::LParen, Token::RParen];
         block_tokens![Token: None];
+        identifier_token![Token: None];
 
         parser![
             token_type: Token,
@@ -288,7 +287,6 @@ mod tests {
             literals: [
                 Token::IntLiteral => Integer<i64>,
             ],
-            identifier_token: Token::Identifier,
         ];
     }
 

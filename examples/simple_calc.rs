@@ -28,6 +28,8 @@ mod lexer {
         r"\^"                                   => Caret,
         // equal token recognized for assignment purposes
         r"="                                    => Equal,
+        // keyword 'let' for variable declaration
+        r"let"                                  => Let,
         // recognize numeric values
         PTN_NUM         => convert_num          => NumLiteral<f64>,
         // recognize variable names (for assignment)
@@ -46,6 +48,8 @@ mod parser {
     group_tokens![Token: Token::LParen, Token::RParen];
     // no block statement handling in this example
     block_tokens![Token: None];
+    // specify the token enum variant used as Identifiers
+    identifier_token![Token: Token::Identifier, String];
 
     parser![
         // specify the token enum
@@ -57,15 +61,17 @@ mod parser {
         ],
         // define the statement types
         statements: [
-            // allow assignments by something like 'x = 5' or 'x = 5^2 + 4'
+            // allow declarations of variables, examples: 'let x = 5' or 'let x = 5^2 + 4'
+            DeclarationStmt(identifier<name>, expression<value>) := {
+                token<Token::Let> identifier<name> token<Token::Equal> expression<value>
+            },
+            // allow updating variables
             AssignmentStmt(identifier<name>, expression<value>) := {
                 identifier<name> token<Token::Equal> expression<value>
             },
             // this is the normal statement type: an single expression
             ExpressionStmt(expression<value>) := {expression<value>},
         ],
-        // specify the token enum variant used as Identifiers
-        identifier_token: Token::Identifier,
         // specify which precedence we want to use (in this case, the standard precedence)
         precedence_type: StandardPrecedence,
 
@@ -103,6 +109,7 @@ mod evaluator {
         // specify how to evaluate the statements: eval_assignment is a predefined method that
         // handles variable storage, and eval_expression handles expression evaluation
         eval_statement: [
+            Statement::DeclarationStmt((ident, expr)) => eval_declaration(ident, expr),
             Statement::AssignmentStmt((ident, expr)) => eval_assignment(ident, expr),
             Statement::ExpressionStmt(expr) => eval_expression(expr)
         ],

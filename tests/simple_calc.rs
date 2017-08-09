@@ -7,7 +7,6 @@ extern crate regex;
 mod lexer {
     use sindra::lex::rules::{
         PTN_NUM, convert_num,
-        PTN_IDENTIFIER, convert_identifier,
     };
 
     lexer![
@@ -19,7 +18,6 @@ mod lexer {
         r"\*"                                   => Asterisk,
         r"\^"                                   => Caret,
         PTN_NUM         => convert_num          => NumLiteral<f64>,
-        PTN_IDENTIFIER  => convert_identifier   => Identifier<String>,
     ];
 }
 
@@ -29,6 +27,7 @@ mod parser {
 
     group_tokens![Token: Token::LParen, Token::RParen];
     block_tokens![Token: None];
+    identifier_token![Token: None];
 
     parser![
         token_type: Token,
@@ -38,7 +37,6 @@ mod parser {
         literals: [
             Token::NumLiteral => Float<f64>,
         ],
-        identifier_token: Token::Identifier,
         precedence_type: StandardPrecedence,
         prefix: (StandardPrecedence::Prefix, [
             Token::Plus     => Plus,

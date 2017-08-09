@@ -27,6 +27,7 @@ mod parser {
 
     group_tokens![Token: None];
     block_tokens![Token: Token::LBrace, Token::RBrace];
+    identifier_token![Token: Token::Identifier, String];
 
     parser![
         token_type: Token,
@@ -43,7 +44,6 @@ mod parser {
         literals: [
             Token::IntLiteral => Int<i64>,
         ],
-        identifier_token: Token::Identifier,
         precedence_type: StandardPrecedence,
         prefix: (StandardPrecedence::Prefix, []),
         infix: []

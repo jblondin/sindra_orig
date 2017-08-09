@@ -39,10 +39,39 @@ impl $token_type {
 }
 
 #[macro_export]
+macro_rules! identifier_token {
+    ($token_type:ty: None) => (
+
+impl $token_type {
+    fn is_identifier_token(&self) -> bool { false }
+    fn extract_identifier(&self) -> Option<String> { None }
+}
+
+    );
+    ($token_type:ty: $identifier_token:path, $identifier_type:ty) => (
+
+impl $token_type {
+    fn is_identifier_token(&self) -> bool {
+        match *self {
+            $identifier_token(_) => true,
+            _ => false,
+        }
+    }
+    fn extract_identifier(&self) -> Option<$identifier_type> {
+        match *self {
+            $identifier_token(ref ident_name) => Some(ident_name.clone()),
+            _ => None,
+        }
+    }
+}
+
+    );
+}
+
+#[macro_export]
 macro_rules! parser_impl {
     (
         token_type($token_type:ty)
-        identifier_token($identifier_token:path)
         statements([
             $($statement_name:tt($($statement_args_tt:tt)*)
                 := { $($statement_tt:tt)* },)*
@@ -338,7 +367,9 @@ fn parse_identifier<'a>(
 ) -> errors::Result<'a, SpannedIdentifier<'a>> {
     debug_assert!(cursor.has_next());
     let &Spanned { span, item: ref token } = cursor.next().unwrap();
-    if let $identifier_token(ref ident_name) = *token {
+
+    if let Some(ref ident_name) = token.extract_identifier() {
+    // if let $identifier_token(ref ident_name) = *token {
         Ok(Spanned::new(Identifier::new(ident_name), span))
     } else {
         Err(errors::Error::spanned(errors::ErrorKind::Parse(
@@ -462,12 +493,19 @@ fn parse_prefix<'a>(cursor: &mut ParserCursor<'a>) -> errors::ResOpt<'a, Spanned
         // add all the literals as prefixes
         $(
             // from_token always returns Some(_) for Literals, unwrap is safe
-            $literal_token(ref value) => Ok(Some(Spanned::new(Expression::Literal(
-                Literal::$literal_name(value.clone())), span))),
+            $literal_token(ref lit) => Ok(Some(Spanned::new(Expression::Literal(
+                Literal::$literal_name(lit.clone())), span))),
         )*
         // add identifier as prefixes
-        $identifier_token(ref s) => Ok(Some(Spanned::new(Expression::Identifier(Identifier::new(s)),
-            span))),
+        ref ident_token if ident_token.is_identifier_token() => {
+
+            if let Some(ref ident_name) = token.extract_identifier() {
+                Ok(Some(Spanned::new(Expression::Identifier(Identifier::new(ident_name)), span)))
+            } else {
+                Err(errors::Error::spanned(errors::ErrorKind::Parse(
+                    "attempt to parse identifier from non-identifier token".to_string()), span))
+            }
+        },
         ref tok if Some(tok) == <$token_type>::group_token_start().as_ref()
             => Ok(parse_grouped_expression(cursor)?),
         ref tok if Some(tok) == <$token_type>::block_token_start().as_ref()
@@ -606,7 +644,6 @@ macro_rules! parser {
             parser_impl,
             [
                 token_type,
-                identifier_token,
                 statements,
                 literals,
                 precedence_type($crate::parse::precedence::StandardPrecedence),
@@ -626,7 +663,6 @@ mod simple_calc {
     mod lexer {
         use lex::rules::{
             PTN_INT, convert_int,
-            PTN_IDENTIFIER, convert_identifier,
         };
 
         lexer![
@@ -635,7 +671,6 @@ mod simple_calc {
             r"\+"                                   => Plus,
             r"\*"                                   => Asterisk,
             PTN_INT         => convert_int          => IntLiteral<i64>,
-            PTN_IDENTIFIER  => convert_identifier   => Identifier<String>,
         ];
     }
 
@@ -645,6 +680,7 @@ mod simple_calc {
 
         group_tokens![Token: Token::LParen, Token::RParen];
         block_tokens![Token: None];
+        identifier_token![Token: None];
 
         parser![
             token_type: Token,
@@ -654,7 +690,6 @@ mod simple_calc {
             literals: [
                 Token::IntLiteral => Integer<i64>,
             ],
-            identifier_token: Token::Identifier,
             precedence_type: StandardPrecedence,
             prefix: (StandardPrecedence::Prefix, []),
             infix: [
@@ -704,6 +739,7 @@ mod statements {
 
         group_tokens![Token: Token::LParen, Token::RParen];
         block_tokens![Token: Token::LBrace, Token::RBrace];
+        identifier_token![Token: Token::Identifier, String];
 
         parser![
             token_type: Token,
@@ -714,7 +750,6 @@ mod statements {
             literals: [
                 Token::IntLiteral => Integer<i64>,
             ],
-            identifier_token: Token::Identifier,
             precedence_type: StandardPrecedence,
             prefix: (StandardPrecedence::Prefix, []),
             infix: []
