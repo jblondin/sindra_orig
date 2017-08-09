@@ -77,6 +77,10 @@ impl Position {
     pub fn offset(&mut self, offset: &Offset) {
         offset.apply_to(self);
     }
+
+    pub fn row_col_eq(&self, other: &Position) -> bool {
+        self.row == other.row && self.column == other.column
+    }
 }
 
 /// Lexer details about a token.

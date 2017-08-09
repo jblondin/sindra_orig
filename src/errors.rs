@@ -6,8 +6,8 @@ use lex;
 
 #[derive(Debug)]
 pub struct Error<'a> {
-    origin: ErrorKind<'a>,
-    span: Option<Span<'a>>,
+    pub origin: ErrorKind<'a>,
+    pub span: Option<Span<'a>>,
 }
 impl<'a> Error<'a> {
     pub fn spanned(origin: ErrorKind<'a>, span: Span<'a>) -> Error<'a> {
@@ -78,6 +78,7 @@ pub enum ErrorKind<'a> {
     LexToken(lex::errors::Error<'a>),
     Parse(String),
     Eval(String),
+    Store(String)
 }
 impl<'a> fmt::Display for ErrorKind<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -87,6 +88,7 @@ impl<'a> fmt::Display for ErrorKind<'a> {
             ErrorKind::Lex(ref s)
                 | ErrorKind::Parse(ref s)
                 | ErrorKind::Eval(ref s)
+                | ErrorKind::Store(ref s)
             => write!(f, "{}: {}", (self as &std::error::Error).description(), s),
         }
     }
@@ -98,6 +100,7 @@ impl<'a> std::error::Error for ErrorKind<'a> {
             ErrorKind::LexToken(_) => "token lex error",
             ErrorKind::Parse(_)    => "parse error",
             ErrorKind::Eval(_)     => "evalulation error",
+            ErrorKind::Store(_)    => "variable error",
         }
     }
     fn cause(&self) -> Option<&std::error::Error> {
@@ -110,4 +113,5 @@ impl<'a> std::error::Error for ErrorKind<'a> {
 
 pub type MultiResult<'a, T> = std::result::Result<T, MultiError<'a>>;
 pub type Result<'a, T> = std::result::Result<T, Error<'a>>;
+pub type KindResult<'a, T> = std::result::Result<T, ErrorKind<'a>>;
 pub type ResOpt<'a, T> = Result<'a, Option<T>>;

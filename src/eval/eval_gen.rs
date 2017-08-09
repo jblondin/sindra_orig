@@ -6,6 +6,9 @@ macro_rules! stmt_eval_arm {
     ($self:ident, eval_assignment($($eval_params:tt),*)) => (
         $self.eval_assignment($($eval_params),*)
     );
+    ($self:ident, eval_declaration($($eval_params:tt),*)) => (
+        $self.eval_declaration($($eval_params),*)
+    );
     ($self:ident, $stmt_eval_func:ident($($eval_params:tt),*)) => (
         $stmt_eval_func($($eval_params),*, $self)
     );
@@ -60,6 +63,7 @@ pub struct Evaluator {
 fn eval_error<'a, T: AsRef<str>>(msg: T) -> ErrorKind<'a> {
     ErrorKind::Eval(msg.as_ref().to_string())
 }
+#[allow(dead_code)]
 type OpResult = ::std::result::Result<Value, String>;
 
 impl Evaluator {
@@ -78,7 +82,7 @@ impl Evaluator {
         sp: Span<'a>,
         block: $block_type<'a>
     ) -> Result<'a, Value> {
-        self.store.push();
+        self.store = self.store.push();
         let ret = self.eval_block_nopush(block);
         match self.store.pop() {
             Some(parent_store) => { self.store = *parent_store; },
@@ -225,8 +229,23 @@ impl Evaluator {
         ident: Spanned<'a, $ident_type>,
         expr: Spanned<'a, Expression<'a>>
     ) -> Result<'a, Value> {
+        let assign_span = ident.span.extend_to(&expr.span);
         let rvalue = self.eval_expression(expr)?;
-        self.store.set(ident.item, rvalue);
+        match self.store.mutate(ident.item, rvalue) {
+            Ok(_) => Ok(Value::Empty),
+            Err(e) => Err(Error::spanned(e, assign_span))
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn eval_declaration<'a>(
+        &mut self,
+        ident: Spanned<'a, $ident_type>,
+        expr: Spanned<'a, Expression<'a>>
+    ) -> Result<'a, Value> {
+        let rvalue = self.eval_expression(expr)?;
+        // TODO: handle previous declarations
+        self.store.declare(ident.item, rvalue);
         Ok(Value::Empty)
     }
 }
@@ -235,9 +254,10 @@ impl Evaluator {
     ); // end implementation macro expression arm
 }
 
+
 #[cfg(test)]
 #[allow(dead_code)]
-mod simple_calc {
+mod tests {
 
     mod lexer {
         use lex::rules::{

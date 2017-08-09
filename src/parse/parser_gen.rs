@@ -346,6 +346,7 @@ fn parse_identifier<'a>(
     }
 }
 
+#[allow(unused_variables)]
 fn parse_expression<'a>(
     cursor: &mut ParserCursor<'a>,
     precedence: $precedence_type,
@@ -385,6 +386,7 @@ fn parse_expression<'a>(
     )
 }
 
+#[allow(dead_code)]
 fn peek_precedence<'a>(cursor: &mut ParserCursor<'a>) -> $precedence_type {
     // get the precedence of the next token (lowest if no token exists)
     if let Some(&&ref peek_tok) = cursor.peek() {
@@ -452,6 +454,7 @@ fn expect_peek_token<'a>(
     }
 }
 
+#[allow(dead_code)]
 fn parse_prefix<'a>(cursor: &mut ParserCursor<'a>) -> errors::ResOpt<'a, SpannedExpr<'a>> {
     debug_assert!(cursor.has_next());
     let &Spanned { span, item: ref token } = cursor.next().unwrap();
@@ -490,6 +493,8 @@ fn parse_prefix<'a>(cursor: &mut ParserCursor<'a>) -> errors::ResOpt<'a, Spanned
         _ => Ok(None)
     }
 }
+
+#[allow(dead_code)]
 fn parse_infix<'a>(
     cursor: &mut ParserCursor<'a>
 ) -> errors::ResOpt<'a, (InfixOp, SpannedExpr<'a>)> {
