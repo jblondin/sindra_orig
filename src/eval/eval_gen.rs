@@ -256,8 +256,9 @@ impl Evaluator {
 
 
 #[cfg(test)]
-#[allow(dead_code)]
 mod tests {
+    // this test just exist to make sure the macro compiles correctly and produces the appropriate
+    // objects; real tests of the full lexer-parser-evaluator system will be in integration tests
 
     mod lexer {
         use lex::rules::{
@@ -268,8 +269,6 @@ mod tests {
         lexer![
             r"\("                                   => LParen,
             r"\)"                                   => RParen,
-            r"\+"                                   => Plus,
-            r"\*"                                   => Asterisk,
             PTN_INT         => convert_int          => IntLiteral<i64>,
             PTN_IDENTIFIER  => convert_identifier   => Identifier<String>,
         ];
@@ -277,7 +276,6 @@ mod tests {
 
     mod parser {
         use super::lexer::Token;
-        use parse::precedence::StandardPrecedence;
 
         group_tokens![Token: Token::LParen, Token::RParen];
         block_tokens![Token: None];
@@ -291,12 +289,6 @@ mod tests {
                 Token::IntLiteral => Integer<i64>,
             ],
             identifier_token: Token::Identifier,
-            precedence_type: StandardPrecedence,
-            prefix: (StandardPrecedence::Prefix, []),
-            infix: [
-                Token::Asterisk => Multiply   => StandardPrecedence::Product,
-                Token::Plus     => Add        => StandardPrecedence::Sum,
-            ]
         ];
     }
 
@@ -316,38 +308,22 @@ mod tests {
             eval_statement: [
                 Statement::ExpressionStmt(expr) => eval_expression(expr)
             ],
-            infix: (InfixOp, [
-                InfixOp::Multiply => multiply_values,
-                InfixOp::Add      => add_values
-            ]),
+            infix: (InfixOp, []),
             prefix: (PrefixOp, []),
             postfix: (PostfixOp, [])
         ];
 
-        fn add_values(left: Value, right: Value) -> OpResult {
-            match (left, right) {
-                (Value::Integer(l), Value::Integer(r)) => Ok(Value::Integer(l + r)),
-                (_, _) => Err("addition only valid between two integers".to_string()),
-            }
-        }
-        fn multiply_values(left: Value, right: Value) -> OpResult {
-            match (left, right) {
-                (Value::Integer(l), Value::Integer(r)) => Ok(Value::Integer(l * r)),
-                (_, _) => Err("multiplication only valid between two integers".to_string()),
-            }
-        }
-
     }
+
+    use self::evaluator::Value;
+    use span::Spanned;
 
     #[test]
-    fn test_simple_calc() {
-        let tokens: Vec<Spanned<lexer::Token>> = lexer::lex("5 * (9 + 2)").unwrap();
-        println!("{:?}", tokens);
+    fn test_simple() {
+        let tokens: Vec<Spanned<lexer::Token>> = lexer::lex("5").unwrap();
         let ast = parser::parse(&tokens).unwrap();
-        println!("{:?}", ast);
         let value = evaluator::eval(ast).unwrap();
-        println!("{:?}", value);
+        assert_eq!(Value::Integer(5), value);
     }
 
-    use span::Spanned;
 }
