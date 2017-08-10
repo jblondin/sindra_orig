@@ -104,8 +104,10 @@ mod evaluator {
         // specify how to evaluate the statements: eval_assignment is a predefined method that
         // handles variable storage, and eval_expression handles expression evaluation
         eval_statement: [
-            Statement::DeclarationStmt((ident, expr)) => eval_declaration(ident, expr),
-            Statement::AssignmentStmt((ident, expr)) => eval_assignment(ident, expr),
+            Statement::DeclarationStmt((ident, expr)) =>
+                eval_declaration(ident, expr, Redeclare::Allowed, AssignReturn::Assigned),
+            Statement::AssignmentStmt((ident, expr)) =>
+                eval_assignment(ident, expr, AssignReturn::Assigned),
             Statement::ExpressionStmt(expr) => eval_expression(expr)
         ],
         // specify the actual methods (defined below) to handle the various infix operators

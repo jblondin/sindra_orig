@@ -59,8 +59,10 @@ mod evaluator {
             Literal::Int => Int<i64>
         ],
         eval_statement: [
-            Statement::AssignmentStmt((ident, expr)) => eval_assignment(ident, expr),
-            Statement::DeclarationStmt((ident, expr)) => eval_declaration(ident, expr),
+            Statement::AssignmentStmt((ident, expr)) =>
+                eval_assignment(ident, expr, AssignReturn::Assigned),
+            Statement::DeclarationStmt((ident, expr)) =>
+                eval_declaration(ident, expr, Redeclare::Disallowed, AssignReturn::Assigned),
             Statement::ExpressionStmt(expr) => eval_expression(expr)
         ],
     ];

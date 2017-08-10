@@ -1,16 +1,30 @@
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Redeclare {
+    Allowed,    // allow variable redeclaration
+    Disallowed, // don't allow variable redeclaration
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum AssignReturn {
+    Assigned,  // return the assigned value
+    PrevValue, // return the previously assigned value at this variable
+    Empty      // return nothing
+}
+
 #[macro_export]
 macro_rules! stmt_eval_arm {
-    ($self:ident, eval_expression($($eval_params:tt),*)) => (
-        $self.eval_expression($($eval_params),*)
+    ($self:ident, eval_expression($($eval_params:tt)*)) => (
+        $self.eval_expression($($eval_params)*)
     );
-    ($self:ident, eval_assignment($($eval_params:tt),*)) => (
-        $self.eval_assignment($($eval_params),*)
+    ($self:ident, eval_assignment($($eval_params:tt)*)) => (
+        $self.eval_assignment($($eval_params)*)
     );
-    ($self:ident, eval_declaration($($eval_params:tt),*)) => (
-        $self.eval_declaration($($eval_params),*)
+    ($self:ident, eval_declaration($($eval_params:tt)*)) => (
+        $self.eval_declaration($($eval_params)*)
     );
-    ($self:ident, $stmt_eval_func:ident($($eval_params:tt),*)) => (
-        $stmt_eval_func($($eval_params),*, $self)
+    ($self:ident, $stmt_eval_func:ident($($eval_params:tt)*)) => (
+        $stmt_eval_func($($eval_params)*, $self)
     );
 }
 
@@ -24,7 +38,7 @@ macro_rules! evaluator_impl {
         ])
         eval_statement([
             $($stmt_type:tt::$stmt_variant:ident($($args:tt)*)
-                => $stmt_eval_func:ident($($params:tt),*)),*
+                => $stmt_eval_func:ident($($params:tt)*)),*
         ])
         infix([
             $($infix_type:path => $infix_op_fn:ident),*
@@ -40,6 +54,7 @@ macro_rules! evaluator_impl {
 use $crate::errors::{Error, Result, ErrorKind};
 use $crate::span::{Span, Spanned};
 use $crate::eval::store::Store;
+use $crate::eval::{AssignReturn, Redeclare};
 
 use $($ast_module)*::Program;
 use $($ast_module)*::Block;
@@ -136,7 +151,7 @@ impl Evaluator {
         match statement.item {
             $(
                 $stmt_type::$stmt_variant($($args)*) => {
-                    stmt_eval_arm!(self, $stmt_eval_func($($params),*))
+                    stmt_eval_arm!(self, $stmt_eval_func($($params)*))
                 },
             )*
         }
@@ -245,12 +260,21 @@ impl Evaluator {
     pub fn eval_assignment<'a>(
         &mut self,
         ident: Spanned<'a, Identifier>,
-        expr: Spanned<'a, Expression<'a>>
+        expr: Spanned<'a, Expression<'a>>,
+        ret_style: AssignReturn
     ) -> Result<'a, Value> {
         let assign_span = ident.span.extend_to(&expr.span);
         let rvalue = self.eval_expression(expr)?;
+        // save an extra if we need to return it
+        let rvc = if ret_style == AssignReturn::Assigned { Some(rvalue.clone()) } else { None };
         match self.store.mutate(ident.item, rvalue) {
-            Ok(_) => Ok(Value::Empty),
+            Ok(prev_value) => {
+                match ret_style {
+                    AssignReturn::Assigned  => Ok(rvc.unwrap()),
+                    AssignReturn::PrevValue => Ok(prev_value),
+                    AssignReturn::Empty     => Ok(Value::Empty),
+                }
+            },
             Err(e) => Err(Error::spanned(e, assign_span))
         }
     }
@@ -259,12 +283,30 @@ impl Evaluator {
     pub fn eval_declaration<'a>(
         &mut self,
         ident: Spanned<'a, Identifier>,
-        expr: Spanned<'a, Expression<'a>>
+        expr: Spanned<'a, Expression<'a>>,
+        allow_redeclaration: Redeclare,
+        ret_style: AssignReturn
     ) -> Result<'a, Value> {
+        let declare_span = ident.span.extend_to(&expr.span);
         let rvalue = self.eval_expression(expr)?;
-        // TODO: handle previous declarations
-        self.store.declare(ident.item, rvalue);
-        Ok(Value::Empty)
+        let rvc = if ret_style == AssignReturn::Assigned { Some(rvalue.clone()) } else { None };
+        let prev_value_opt = self.store.declare(ident.item.clone(), rvalue);
+
+        // check if we're overwriting an existing variable
+        if allow_redeclaration == Redeclare::Disallowed && prev_value_opt.is_some() {
+            return Err(Error::spanned(eval_error(
+                format!("illegal attempt to redeclare variable '{}'", ident.item)), declare_span));
+        }
+        match ret_style {
+            AssignReturn::Assigned  => Ok(rvc.unwrap()),
+            AssignReturn::PrevValue => {
+                match prev_value_opt {
+                    Some(prev_value) => Ok(prev_value),
+                    None             => Ok(Value::Empty),
+                }
+            },
+            AssignReturn::Empty     => Ok(Value::Empty),
+        }
     }
 }
 
