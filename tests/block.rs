@@ -52,14 +52,9 @@ mod parser {
 
 
 mod evaluator {
-    use super::parser::{Program, Block, Statement, Identifier, Expression, InfixOp, PrefixOp,
-        PostfixOp, Literal};
 
     evaluator![
-        program_type: Program,
-        block_type: Block,
-        identifier_type: Identifier,
-        expression_type: Expression,
+        ast_module: super::parser,
         values: [
             Literal::Int => Int<i64>
         ],
@@ -68,10 +63,8 @@ mod evaluator {
             Statement::DeclarationStmt((ident, expr)) => eval_declaration(ident, expr),
             Statement::ExpressionStmt(expr) => eval_expression(expr)
         ],
-        infix: (InfixOp, []),
-        prefix: (PrefixOp, []),
-        postfix: (PostfixOp, [])
     ];
+
 }
 
 use sindra::errors::{Error, ErrorKind};

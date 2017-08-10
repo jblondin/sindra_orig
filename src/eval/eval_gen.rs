@@ -16,26 +16,23 @@ macro_rules! stmt_eval_arm {
 
 
 #[macro_export]
-macro_rules! evaluator {
+macro_rules! evaluator_impl {
     (
-        program_type: $program_type:tt,
-        block_type: $block_type:tt,
-        identifier_type: $ident_type:ty,
-        expression_type: $expr_type:ty,
-        values: [
+        ast_module($($ast_module:tt)*)
+        values([
             $($value_source:path => $variant:ident<$variant_type:ty>),*
-        ],
-        eval_statement: [
+        ])
+        eval_statement([
             $($stmt_type:tt::$stmt_variant:ident($($args:tt)*)
                 => $stmt_eval_func:ident($($params:tt),*)),*
-        ],
-        infix: ($infix_op_type:ty, [
+        ])
+        infix([
             $($infix_type:path => $infix_op_fn:ident),*
-        ]),
-        prefix: ($prefix_op_type:ty, [
+        ])
+        prefix([
             $($prefix_type:path => $prefix_op_fn:ident),*
-        ]),
-        postfix: ($postfix_op_type:ty, [
+        ])
+        postfix([
             $($postfix_type:path => $postfix_op_fn:ident),*
         ])
     ) => (
@@ -44,6 +41,16 @@ use $crate::errors::{Error, Result, ErrorKind};
 use $crate::span::{Span, Spanned};
 use $crate::eval::store::Store;
 
+use $($ast_module)*::Program;
+use $($ast_module)*::Block;
+use $($ast_module)*::Statement;
+use $($ast_module)*::Identifier;
+use $($ast_module)*::Literal;
+use $($ast_module)*::Expression;
+use $($ast_module)*::InfixOp;
+use $($ast_module)*::PrefixOp;
+use $($ast_module)*::PostfixOp;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     $($variant($variant_type),)*
@@ -51,13 +58,13 @@ pub enum Value {
 }
 
 #[allow(dead_code)]
-pub fn eval<'a>(program: $program_type<'a>) -> Result<'a, Value> {
+pub fn eval<'a>(program: Program<'a>) -> Result<'a, Value> {
     Evaluator::new().eval(program)
 }
 
 pub struct Evaluator {
     #[allow(dead_code)]
-    store: Store<$ident_type, Value>,
+    store: Store<Identifier, Value>,
 }
 
 fn eval_error<'a, T: AsRef<str>>(msg: T) -> ErrorKind<'a> {
@@ -73,14 +80,14 @@ impl Evaluator {
         }
     }
 
-    pub fn eval<'a>(&mut self, program: $program_type<'a>) -> Result<'a, Value> {
+    pub fn eval<'a>(&mut self, program: Program<'a>) -> Result<'a, Value> {
         self.eval_block_nopush(program)
     }
 
     pub fn eval_block<'a>(
         &mut self,
         sp: Span<'a>,
-        block: $block_type<'a>
+        block: Block<'a>
     ) -> Result<'a, Value> {
         self.store = self.store.push();
         let ret = self.eval_block_nopush(block);
@@ -93,12 +100,12 @@ impl Evaluator {
         ret
     }
 
-    pub fn eval_block_nopush<'a>(&mut self, mut block: $block_type<'a>) -> Result<'a, Value> {
+    pub fn eval_block_nopush<'a>(&mut self, mut block: Block<'a>) -> Result<'a, Value> {
         block.reverse();
         self.eval_reversed_block(block)
     }
 
-    pub fn eval_reversed_block<'a>(&mut self, mut block: $block_type<'a>) -> Result<'a, Value> {
+    pub fn eval_reversed_block<'a>(&mut self, mut block: Block<'a>) -> Result<'a, Value> {
         if let Some(first) = block.pop() {
             let value = self.eval_statement(first)?;
             if block.is_empty() {
@@ -214,7 +221,7 @@ impl Evaluator {
     pub fn eval_identifier<'a>(
         &mut self,
         sp: Span<'a>,
-        ident: $ident_type
+        ident: Identifier
     ) -> Result<'a, Value> {
         match self.store.get(&ident) {
             Some(value) => Ok(value),
@@ -226,7 +233,7 @@ impl Evaluator {
     #[allow(dead_code)]
     pub fn eval_assignment<'a>(
         &mut self,
-        ident: Spanned<'a, $ident_type>,
+        ident: Spanned<'a, Identifier>,
         expr: Spanned<'a, Expression<'a>>
     ) -> Result<'a, Value> {
         let assign_span = ident.span.extend_to(&expr.span);
@@ -240,7 +247,7 @@ impl Evaluator {
     #[allow(dead_code)]
     pub fn eval_declaration<'a>(
         &mut self,
-        ident: Spanned<'a, $ident_type>,
+        ident: Spanned<'a, Identifier>,
         expr: Spanned<'a, Expression<'a>>
     ) -> Result<'a, Value> {
         let rvalue = self.eval_expression(expr)?;
@@ -254,6 +261,23 @@ impl Evaluator {
     ); // end implementation macro expression arm
 }
 
+#[macro_export]
+macro_rules! evaluator {
+    ($($all:tt)*) => (
+        macro_preparse!(
+            evaluator_impl,
+            [
+                ast_module,
+                values,
+                eval_statement,
+                infix([]),
+                prefix([]),
+                postfix([]),
+            ],
+            $($all)*
+        );
+    );
+}
 
 #[cfg(test)]
 mod tests {
@@ -292,23 +316,15 @@ mod tests {
 
 
     mod evaluator {
-        use super::parser::{Program, Block, Statement, Expression, Literal, InfixOp, PrefixOp,
-            PostfixOp, Identifier};
 
         evaluator![
-            program_type: Program,
-            block_type: Block,
-            identifier_type: Identifier,
-            expression_type: Expression,
+            ast_module: super::parser,
             values: [
                 Literal::Integer => Integer<i64>
             ],
             eval_statement: [
                 Statement::ExpressionStmt(expr) => eval_expression(expr)
-            ],
-            infix: (InfixOp, []),
-            prefix: (PrefixOp, []),
-            postfix: (PostfixOp, [])
+            ]
         ];
 
     }

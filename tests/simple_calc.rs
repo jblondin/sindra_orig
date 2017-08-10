@@ -53,32 +53,26 @@ mod parser {
 }
 
 mod evaluator {
-    use super::parser::{Program, Block, Statement, Identifier, Expression, InfixOp, PrefixOp,
-        PostfixOp, Literal};
 
     evaluator![
-        program_type: Program,
-        block_type: Block,
-        identifier_type: Identifier,
-        expression_type: Expression,
+        ast_module: super::parser,
         values: [
             Literal::Float => Float<f64>
         ],
         eval_statement: [
             Statement::ExpressionStmt(expr) => eval_expression(expr)
         ],
-        infix: (InfixOp, [
+        infix: [
             InfixOp::Multiply => multiply_values,
             InfixOp::Add      => add_values,
             InfixOp::Subtract => subtract_values,
             InfixOp::Divide   => divide_values,
             InfixOp::Power    => raise
-        ]),
-        prefix: (PrefixOp, [
+        ],
+        prefix: [
             PrefixOp::Minus   => negate_value,
             PrefixOp::Plus    => posate_value
-        ]),
-        postfix: (PostfixOp, [])
+        ],
     ];
 
     fn add_values(left: Value, right: Value) -> OpResult {
