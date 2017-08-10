@@ -57,6 +57,17 @@ pub enum Value {
     Empty
 }
 
+impl ::std::fmt::Display for Value {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        match *self {
+            $(
+                Value::$variant(ref value) => write!(f, "{}", value),
+            )*
+            Value::Empty => write!(f, ""),
+        }
+    }
+}
+
 #[allow(dead_code)]
 pub fn eval<'a>(program: Program<'a>) -> Result<'a, Value> {
     Evaluator::new().eval(program)

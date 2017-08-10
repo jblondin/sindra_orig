@@ -22,9 +22,17 @@ macro_rules! impl_read_eval_print {
                                 STDOUT_ERRSTR, e))?;
                         }
                         let value = $self.evaluator.eval(program);
-                        if $self.print_value {
-                            writeln!($self.cout, "{:?}", value).map_err(|e| format!("{}: {}",
-                                STDOUT_ERRSTR, e))?;
+                        match value {
+                            Ok(v) => {
+                                if $self.print_value {
+                                    writeln!($self.cout, "{}", v).map_err(|e| format!("{}: {}",
+                                        STDOUT_ERRSTR, e))?;
+                                }
+                            },
+                            Err(e) => {
+                                writeln!($self.cout, "{}", e).map_err(|e| format!("{}: {}",
+                                    STDOUT_ERRSTR, e))?;
+                            }
                         }
                     },
                     Err(e) => {
