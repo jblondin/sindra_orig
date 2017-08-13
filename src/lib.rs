@@ -12,3 +12,5 @@ pub mod pprint;
 #[macro_use] pub mod parse;
 #[macro_use] pub mod eval;
 #[macro_use] pub mod interp;
+
+#[macro_use] pub mod test_utils;

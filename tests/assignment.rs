@@ -50,56 +50,6 @@ mod parser {
     ];
 }
 
-macro_rules! assert_value_matches {
-    (
-        $input:expr,
-        $evaluator:ident,
-        $expected:expr
-    ) => ({
-        use parser;
-        use lexer;
-        let value = $evaluator.eval(parser::parse(&lexer::lex($input).unwrap()).unwrap()).unwrap();
-        println!("{:?}", value);
-        assert_eq!(value, $expected);
-    })
-}
-
-macro_rules! assert_error {
-    (
-        $input:expr,
-        $evaluator:expr,
-        $test:expr,
-        $err_type:path,
-        $start_pos:expr,
-        $end_pos:expr
-    ) => ({
-        use parser;
-        use lexer;
-        use sindra::errors::Error;
-        use sindra::span::{Span, Position};
-
-        let tokens = lexer::lex($input).unwrap();
-        let evald = $evaluator.eval(parser::parse(&tokens).unwrap());
-        println!("evaluator result: {:?}", evald);
-        match evald {
-            Err(Error { origin: $err_type(errmsg), span: Some(Span { start, end, .. }) }) => {
-                assert!(errmsg.contains($test));
-                assert!(start.row_col_eq(&$start_pos));
-                let end_pos = $end_pos;
-                match end {
-                    Some(end) => {
-                        assert!(end_pos.is_some() && end.row_col_eq(&end_pos.unwrap()));
-                    },
-                    None => { assert!(end_pos.is_none()); }
-                }
-            }
-            other => { panic!("Expected error type {}, got: {:?}", stringify!($err_type), other); },
-        }
-
-
-    })
-}
-
 mod evaluator_return_assigned {
 
     evaluator![
@@ -120,11 +70,11 @@ mod evaluator_return_assigned {
     fn test_return() {
         let mut evaluator = Evaluator::new();
         // x initialize to 5
-        assert_value_matches!(r#"let x = 5;"#, evaluator, Value::Int(5));
+        assert_value_matches!(in: r#"let x = 5;"#, eval: evaluator, expect: Value::Int(5));
         // x should be set to 2 and 2 returned
-        assert_value_matches!(r#"x = 2;"#, evaluator, Value::Int(2));
+        assert_value_matches!(in: r#"x = 2;"#, eval: evaluator, expect: Value::Int(2));
         // final value of 'x' should be 2
-        assert_value_matches!(r#"x"#, evaluator, Value::Int(2));
+        assert_value_matches!(in: r#"x"#, eval: evaluator, expect: Value::Int(2));
 
     }
 
@@ -132,13 +82,13 @@ mod evaluator_return_assigned {
     fn test_redeclare() {
         let mut evaluator = Evaluator::new();
         // x initialize to 5
-        assert_value_matches!(r#"let x = 5;"#, evaluator, Value::Int(5));
+        assert_value_matches!(in: r#"let x = 5;"#, eval: evaluator, expect: Value::Int(5));
         // x should be redeclared as 6, with 6 returned
-        assert_value_matches!(r#"let x = 6;"#, evaluator, Value::Int(6));
+        assert_value_matches!(in: r#"let x = 6;"#, eval: evaluator, expect: Value::Int(6));
         // x should be set to 2 and 2 returned
-        assert_value_matches!(r#"x = 2;"#, evaluator, Value::Int(2));
+        assert_value_matches!(in: r#"x = 2;"#, eval: evaluator, expect: Value::Int(2));
         // final value of 'x' should be 2
-        assert_value_matches!(r#"x"#, evaluator, Value::Int(2));
+        assert_value_matches!(in: r#"x"#, eval: evaluator, expect: Value::Int(2));
 
     }
 }
@@ -163,11 +113,12 @@ mod evaluator_return_prevvalue {
     fn test_return() {
         let mut evaluator = Evaluator::new();
         // x is unset before initialization, so declaration should always return empty
-        assert_value_matches!(r#"let x = 5;"#, evaluator, Value::Empty);
+        assert_value_matches!(in: r#"let x = 5;"#, eval: evaluator,
+            expect: Value::Empty);
         // x should be set to 2 and 5 returned
-        assert_value_matches!(r#"x = 2;"#, evaluator, Value::Int(5));
+        assert_value_matches!(in: r#"x = 2;"#, eval: evaluator, expect: Value::Int(5));
         // final value of 'x' should be 2
-        assert_value_matches!(r#"x"#, evaluator, Value::Int(2));
+        assert_value_matches!(in: r#"x"#, eval: evaluator, expect: Value::Int(2));
 
     }
 
@@ -175,13 +126,14 @@ mod evaluator_return_prevvalue {
     fn test_redeclare() {
         let mut evaluator = Evaluator::new();
         // x is unset before initialization, so declaration should always return empty
-        assert_value_matches!(r#"let x = 5;"#, evaluator, Value::Empty);
+        assert_value_matches!(in: r#"let x = 5;"#, eval: evaluator,
+            expect: Value::Empty);
         // x should be redeclared as 6, with previous value 5 returned
-        assert_value_matches!(r#"let x = 6;"#, evaluator, Value::Int(5));
+        assert_value_matches!(in: r#"let x = 6;"#, eval: evaluator, expect: Value::Int(5));
         // x should be set to 2 and 6 returned
-        assert_value_matches!(r#"x = 2;"#, evaluator, Value::Int(6));
+        assert_value_matches!(in: r#"x = 2;"#, eval: evaluator, expect: Value::Int(6));
         // final value of 'x' should be 2
-        assert_value_matches!(r#"x"#, evaluator, Value::Int(2));
+        assert_value_matches!(in: r#"x"#, eval: evaluator, expect: Value::Int(2));
 
     }
 }
@@ -206,24 +158,24 @@ mod evaluator_return_empty {
     fn test_return() {
         let mut evaluator = Evaluator::new();
         // declaration should return empty
-        assert_value_matches!(r#"let x = 5;"#, evaluator, Value::Empty);
+        assert_value_matches!(in: r#"let x = 5;"#, eval: evaluator, expect: Value::Empty);
         // assignment should return empty
-        assert_value_matches!(r#"x = 2;"#, evaluator, Value::Empty);
+        assert_value_matches!(in: r#"x = 2;"#, eval: evaluator, expect: Value::Empty);
         // final value of 'x' should be 2
-        assert_value_matches!(r#"x"#, evaluator, Value::Int(2));
+        assert_value_matches!(in: r#"x"#, eval: evaluator, expect: Value::Int(2));
     }
 
     #[test]
     fn test_redeclare() {
         let mut evaluator = Evaluator::new();
         // declaration should return empty
-        assert_value_matches!(r#"let x = 5;"#, evaluator, Value::Empty);
+        assert_value_matches!(in: r#"let x = 5;"#, eval: evaluator, expect: Value::Empty);
         // redeclaration should return empty
-        assert_value_matches!(r#"let x = 6;"#, evaluator, Value::Empty);
+        assert_value_matches!(in: r#"let x = 6;"#, eval: evaluator, expect: Value::Empty);
         // assignment should return empty
-        assert_value_matches!(r#"x = 2;"#, evaluator, Value::Empty);
+        assert_value_matches!(in: r#"x = 2;"#, eval: evaluator, expect: Value::Empty);
         // final value of 'x' should be 2
-        assert_value_matches!(r#"x"#, evaluator, Value::Int(2));
+        assert_value_matches!(in: r#"x"#, eval: evaluator, expect: Value::Int(2));
 
     }
 }
@@ -251,13 +203,14 @@ mod evaluator_disallowed_redeclare {
 
         let mut evaluator = Evaluator::new();
         // declaration should return empty
-        assert_value_matches!(r#"let x = 5;"#, evaluator, Value::Int(5));
+        assert_value_matches!(in: r#"let x = 5;"#, eval: evaluator, expect: Value::Int(5));
         // assignment should return empty
-        assert_value_matches!(r#"x = 2;"#, evaluator, Value::Int(2));
+        assert_value_matches!(in: r#"x = 2;"#, eval: evaluator, expect: Value::Int(2));
         // final value of 'x' should be 2
-        assert_value_matches!(r#"x"#, evaluator, Value::Int(2));
+        assert_value_matches!(in: r#"x"#, eval: evaluator, expect: Value::Int(2));
         // try to redefine 'x'
-        assert_error!(r#"let x = 14;"#, evaluator, "attempt to redeclare variable 'x'",
-            ErrorKind::Eval, Position::new(0, 1, 5), Some(Position::new(0, 1, 11)));
+        assert_error!(in: r#"let x = 14;"#, eval: evaluator,
+            match: "attempt to redeclare variable 'x'", err: ErrorKind::Eval,
+            start: Position::new(0, 1, 5), end: Some(Position::new(0, 1, 11)));
     }
 }

@@ -690,8 +690,6 @@ mod simple_calc {
             literals: [
                 Token::IntLiteral => Integer<i64>,
             ],
-            precedence_type: StandardPrecedence,
-            prefix: (StandardPrecedence::Prefix, []),
             infix: [
                 Token::Asterisk => Multiply   => StandardPrecedence::Product,
                 Token::Plus     => Add        => StandardPrecedence::Sum,

@@ -69,46 +69,9 @@ mod evaluator {
 
 }
 
-use sindra::errors::{Error, ErrorKind};
-use sindra::span::{Span, Position};
+use sindra::errors::{ErrorKind};
 
 use self::evaluator::{Value};
-
-fn assert_value_matches(s: &str, expected: Value) {
-    let value = evaluator::eval(parser::parse(&lexer::lex(s).unwrap()).unwrap()).unwrap();
-    println!("{:?}", value);
-    assert_eq!(value, expected);
-}
-
-macro_rules! assert_error {
-    (
-        $input:expr,
-        $test:expr,
-        $err_type:path,
-        $start_pos:expr,
-        $end_pos:expr
-    ) => ({
-        let tokens = lexer::lex($input).unwrap();
-        let evald = evaluator::eval(parser::parse(&tokens).unwrap());
-        println!("evaluator result: {:?}", evald);
-        match evald {
-            Err(Error { origin: $err_type(errmsg), span: Some(Span { start, end, .. }) }) => {
-                assert!(errmsg.contains($test));
-                assert!(start.row_col_eq(&$start_pos));
-                let end_pos = $end_pos;
-                match end {
-                    Some(end) => {
-                        assert!(end_pos.is_some() && end.row_col_eq(&end_pos.unwrap()));
-                    },
-                    None => { assert!(end_pos.is_none()); }
-                }
-            }
-            other => { panic!("Expected error type {}, got: {:?}", stringify!($err_type), other); },
-        }
-
-
-    })
-}
 
 #[test]
 fn test_scope() {
@@ -120,15 +83,15 @@ let x = 5;
 x
     "#;
     // 'x' should be updated inside the block
-    assert_value_matches(TEST_INPUT_BASIC, Value::Int(2));
+    assert_value_matches!(in: TEST_INPUT_BASIC, expect: Value::Int(2));
 
     const TEST_INPUT_MISSINGVAR: &str = r#"
 x = 5;
 x
     "#;
     // 'x' should be updated inside the block
-    assert_error!(TEST_INPUT_MISSINGVAR, "variable not found", ErrorKind::Store,
-        Position::new(0, 2, 1), Some(Position::new(0, 2, 6)));
+    assert_error!(in: TEST_INPUT_MISSINGVAR, match: "variable not found", err: ErrorKind::Store,
+        start: Position::new(0, 2, 1), end: Some(Position::new(0, 2, 6)));
 
     const TEST_INPUT_OUTOFSCOPE: &str = r#"
 let x = 5;
@@ -137,6 +100,6 @@ let x = 5;
 }
 y
     "#;
-    assert_error!(TEST_INPUT_OUTOFSCOPE, "identifier not found", ErrorKind::Eval,
-        Position::new(0, 6, 1), Some(Position::new(0, 6, 2)));
+    assert_error!(in: TEST_INPUT_OUTOFSCOPE, match: "identifier not found", err: ErrorKind::Eval,
+        start: Position::new(0, 6, 1), end: Some(Position::new(0, 6, 2)));
 }
