@@ -133,6 +133,12 @@ impl<'a, T> Spanned<'a, T> where T: Debug + Clone + PartialEq {
             span: span,
         }
     }
+    pub fn new_pos(item: T, input: &'a str, start: Position, end: Position) -> Spanned<'a, T> {
+        Spanned {
+            item: item,
+            span: Span::new(input, start, end)
+        }
+    }
     pub fn spans_item(&self, item: &T) -> bool {
         &self.item == item
     }
