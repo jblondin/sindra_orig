@@ -417,13 +417,14 @@ fn parse_expression<'a>(
                 let infix_expr = match parse_infix(cursor)? {
                     Some((op, right_expr)) => {
                         let left_span = left_expr.span;
+                        let right_span = right_expr.span;
                         Spanned::new(
                             Expression::Infix {
                                 op: op,
                                 left: Box::new(left_expr),
                                 right: Box::new(right_expr),
                             },
-                            left_span
+                            left_span.extend_to(&right_span)
                         )
                     },
                     None => {
