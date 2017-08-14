@@ -72,12 +72,27 @@ pub fn lex<'a>(input: &'a str) -> errors::MultiResult<'a, Vec<Spanned<'a, Token>
     match Lexer::new(input).lex() {
         Ok(tokenspans) => {
             let mut lex_errors = vec![];
-            for ts in &tokenspans {
-                if ts.spans_item(&Token::Unrecognized) {
-                    lex_errors.push(errors::Error::spanned(errors::ErrorKind::Lex(
-                        format!("unrecognized token: '{}'", ts.span.as_slice())
-                    ), ts.span));
+            let mut prev: Option<(usize, Span)> = None;
+            for (i, sptok) in tokenspans.iter().enumerate() {
+                if sptok.spans_item(&Token::Unrecognized) {
+                    if let Some((prev_i, prev_span)) = prev {
+                        if prev_i < i - 1 {
+                            lex_errors.push(errors::Error::spanned(errors::ErrorKind::Lex(
+                                format!("unrecognized token: '{}'", prev_span.as_slice())
+                            ), prev_span));
+                            prev = None;
+                        } else {
+                            prev = Some((i, prev_span.extend_to(&sptok.span)));
+                        }
+                    } else {
+                        prev = Some((i, sptok.span));
+                    }
                 }
+            }
+            if let Some((_, final_span)) = prev {
+                lex_errors.push(errors::Error::spanned(errors::ErrorKind::Lex(
+                    format!("unrecognized token: '{}'", final_span.as_slice())
+                ), final_span));
             }
             if lex_errors.is_empty() {
                 Ok(tokenspans)
@@ -107,15 +122,17 @@ impl<'a> Lexer<'a> {
         // compile the regexes twice, once for when we need to match individual regexes, and once
         // in the regex set (which processes all at once)
         // we also anchor each expression so it only matches the beginning of the input
+        #[allow(unused_variables)]
         let anchor_to_start = |s: &str| "^(?:".to_string() + s + ")";
         let regex_list = RegexList::from_vec(vec![
-            $(Regex::new(&anchor_to_start($d_lexeme)).unwrap()),*,
+            $(Regex::new(&anchor_to_start($d_lexeme)).unwrap(),)*
             $(Regex::new(&anchor_to_start($r_lexeme)).unwrap()),*
         ]);
-        let set = RegexSet::new([
-            $(anchor_to_start($d_lexeme)),*,
+        let all_rules: Vec<String> = vec![
+            $(anchor_to_start($d_lexeme),)*
             $(anchor_to_start($r_lexeme)),*
-        ].iter()).unwrap();
+        ];
+        let set = RegexSet::new(all_rules.iter()).unwrap();
 
         let mut curr_pos = Position::start();
         let mut tokens = vec![];
@@ -287,35 +304,545 @@ impl<'a> Lexer<'a> {
     ( $r_lexeme:expr => $r_rule:expr => $r_token:ident<$r_type:ty>, $($rest:tt)* ) => (
         lexer!(
             direct [];
-            rules [$r_lexeme => $r_rules => $r_token<$r_type>,];
+            rules [$r_lexeme => $r_rule => $r_token<$r_type>,];
             $($rest)*
+        );
+    );
+
+    // empty
+    () => (
+        lexer!(
+            direct [];
+            rules [];
         );
     );
 } // end macro definition
 
 #[cfg(test)]
-mod basic {
-    use lex::rules::{PTN_FLOAT, convert_float};
-
-    lexer![
-        r"\+"                               => Plus,
-        r"\+="                              => PlusEqual,
-        r"-"                                => Minus,
-        r"-="                               => MinusEqual,
-        r"="                                => Equal,
-        r"=="                               => DoubleEqual,
-
-        PTN_FLOAT       => convert_float    => FloatLiteral<f64>
-    ];
+mod empty {
+    mod lexer {
+        lexer![];
+    }
 
     #[test]
-    fn test_multimatch() {
-        println!("{:?}", lex("+"));
-        println!("{:?}", lex("+="));
-        println!("{:?}", lex("++="));
-        println!("{:?}", lex("    + += ++="));
-        println!("{:?}", lex("=
+    fn test_empty() {
+        let input = "";
+        let tokens = self::lexer::lex(input).unwrap();
+        assert_eq!(tokens.len(), 0);
+    }
 
-            +=+"));
+    #[test]
+    fn test_all_whitespace() {
+        let input = "\t  \n";
+        let tokens = self::lexer::lex(input).unwrap();
+        assert_eq!(tokens.len(), 0);
+    }
+
+    #[test]
+    fn test_lex_unknown() {
+        use span::{Span, Position};
+
+        let input = "\n ☕";
+        assert_unrecognized_token!(lexer_mod: self::lexer, in: input,
+            expect_span: Span::new("\n ☕", Position::new(2, 2, 2), Position::new(5, 2, 3)));
+    }
+
+}
+
+#[cfg(test)]
+mod punctuation {
+    mod lexer {
+        lexer![
+            r"\["   => LBracket,
+            r"\]"   => RBracket,
+            r"\("   => LParen,
+            r"\)"   => RParen,
+            r"\{"   => LBrace,
+            r"\}"   => RBrace,
+            r","    => Comma,
+            r":"    => Colon,
+            r";"    => Semicolon,
+            r"\."   => Dot,
+            r"\|"   => Pipe,
+            r"~"    => Tilde,
+            r"\?"    => Question,
+        ];
+    }
+
+    #[test]
+    fn test() {
+        let input = r"[](){},:;.|~?";
+
+        use self::lexer::Token;
+        let expected = [
+            Token::LBracket,
+            Token::RBracket,
+            Token::LParen,
+            Token::RParen,
+            Token::LBrace,
+            Token::RBrace,
+            Token::Comma,
+            Token::Colon,
+            Token::Semicolon,
+            Token::Dot,
+            Token::Pipe,
+            Token::Tilde,
+            Token::Question
+        ];
+
+        assert_input_tokens!(lexer_mod: self::lexer, in: input, expect: expected);
+    }
+}
+
+#[cfg(test)]
+mod operators {
+    mod lexer {
+        lexer![
+            r"="    => Equal,
+            r"=="   => DoubleEqual,
+            r"!"    => Not,
+            r"!="   => NotEqual,
+            r"<"    => LessThan,
+            r"<="   => LessThanEqual,
+            r">"    => GreaterThan,
+            r">="   => GreaterThanEqual,
+            r"\+"   => Plus,
+            r"\+="  => PlusEqual,
+            r"-"    => Minus,
+            r"-="   => MinusEqual,
+            r"\*"   => Asterisk,
+            r"\*="  => AsteriskEqual,
+            r"/"    => Slash,
+            r"/="   => SlashEqual,
+            r"\^"   => Caret,
+            r"\^="  => CaretEqual,
+        ];
+    }
+
+
+    #[test]
+    fn test() {
+        let input = "= == ! != < <= > >= + += - -= * *= / /= ^ ^=";
+
+        use self::lexer::Token;
+        let expected = [
+            Token::Equal,
+            Token::DoubleEqual,
+            Token::Not,
+            Token::NotEqual,
+            Token::LessThan,
+            Token::LessThanEqual,
+            Token::GreaterThan,
+            Token::GreaterThanEqual,
+            Token::Plus,
+            Token::PlusEqual,
+            Token::Minus,
+            Token::MinusEqual,
+            Token::Asterisk,
+            Token::AsteriskEqual,
+            Token::Slash,
+            Token::SlashEqual,
+            Token::Caret,
+            Token::CaretEqual,
+        ];
+
+        assert_input_tokens!(lexer_mod: self::lexer, in: input, expect: expected);
+    }
+}
+
+
+#[cfg(test)]
+mod keywords {
+    mod lexer {
+        lexer![
+            r"let"      => Let,
+            r"fn"       => Function,
+            r"if"       => If,
+            r"else"     => Else,
+            r"return"   => Return,
+        ];
+    }
+
+    #[test]
+    fn test() {
+        let input = "let fn if else return";
+
+        use self::lexer::Token;
+        let expected = [
+            Token::Let,
+            Token::Function,
+            Token::If,
+            Token::Else,
+            Token::Return,
+        ];
+
+        assert_input_tokens!(lexer_mod: self::lexer, in: input, expect: expected);
+    }
+}
+
+#[cfg(test)]
+mod float {
+    mod lexer {
+        use lex::rules::{PTN_FLOAT, convert_float};
+
+        lexer![
+            PTN_FLOAT       => convert_float        => FloatLiteral<f64>,
+        ];
+    }
+
+    #[test]
+    fn test_lex_float_literal() {
+        use self::lexer::Token;
+
+        let input = "20. 10.249 10.249_942 1_234_567.890_100";
+        let expected = [
+            Token::FloatLiteral(20.0),
+            Token::FloatLiteral(10.249),
+            Token::FloatLiteral(10.249942),
+            Token::FloatLiteral(1234567.8901)
+        ];
+        assert_input_tokens!(lexer_mod: self::lexer, in: input, expect: expected);
+
+        let input = "20.1e2 20.2e+3 20.3e-4 20.4E5 20.5E+6 2_0.6E-7 20.0e8 20.9e1_0";
+        let expected = [
+            Token::FloatLiteral(2_010.),
+            Token::FloatLiteral(20_200.),
+            Token::FloatLiteral(0.00203),
+            Token::FloatLiteral(2_040_000.),
+            Token::FloatLiteral(20_500_000.),
+            Token::FloatLiteral(0.00000206),
+            Token::FloatLiteral(2_000_000_000.),
+            Token::FloatLiteral(209_000_000_000.),
+        ];
+        assert_input_tokens!(lexer_mod: self::lexer, in: input, expect: expected);
+
+        let input = "2e5 4e-2";
+        let expected = [
+            Token::FloatLiteral(200_000.),
+            Token::FloatLiteral(0.04),
+        ];
+        assert_input_tokens!(lexer_mod: self::lexer, in: input, expect: expected);
+    }
+}
+
+#[cfg(test)]
+mod int {
+    mod lexer {
+        use lex::rules::{PTN_INT, convert_int};
+
+        lexer![
+            PTN_INT         => convert_int          => IntLiteral<i64>,
+        ];
+    }
+
+    use self::lexer::Token;
+
+    #[test]
+    fn test_lex_dec_literal() {
+        let input = "1502 0000 052 1_234_567 1_2_3";
+        let expected = [
+            Token::IntLiteral(1502),
+            Token::IntLiteral(0),
+            Token::IntLiteral(52),
+            Token::IntLiteral(1234567),
+            Token::IntLiteral(1_2_3),
+        ];
+        assert_input_tokens!(lexer_mod: self::lexer, in: input, expect: expected);
+    }
+
+    #[test]
+    fn test_lex_hex_literal() {
+        let input = "0x1D02 0x000 0x052 0x1_234 0x1_C_3 0xDEADBEEF";
+        const P16: [i64; 8] = [1, 16, 256, 4096, 65536, 1048576, 16777216, 268435456];
+        let expected = [
+            Token::IntLiteral(P16[3] + 13*P16[2] + 2),
+            Token::IntLiteral(0),
+            Token::IntLiteral(5*16 + 2),
+            Token::IntLiteral(P16[3] + 2*P16[2] + 3*16 + 4),
+            Token::IntLiteral(P16[2] + 12*16 + 3),
+            Token::IntLiteral(13*P16[7] + 14*P16[6] + 10*P16[5]
+                + 13*P16[4] + 11*P16[3] + 14*P16[2] + 14*P16[1] + 15*P16[0])
+        ];
+        assert_input_tokens!(lexer_mod: self::lexer, in: input, expect: expected);
+    }
+
+    #[test]
+    fn test_lex_oct_literal() {
+        let input = "0o1502 0o000 0o052 0o1_234 0o1_2_3";
+        const P8: [i64; 4] = [1, 8, 64, 512];
+        let expected = [
+            Token::IntLiteral(1*P8[3] + 5*P8[2] + 2),
+            Token::IntLiteral(0),
+            Token::IntLiteral(5*8 + 2),
+            Token::IntLiteral(P8[3] + 2*P8[2] + 3*P8[1] + 4),
+            Token::IntLiteral(P8[2] + 2*
+                P8[1] + 3)
+        ];
+        assert_input_tokens!(lexer_mod: self::lexer, in: input, expect: expected);
+
+        let input = "0o429";
+        // interpreted as an octal number 42, then a decimal number 9
+        let expected = [
+            Token::IntLiteral(4*P8[1] + 2*P8[0]),
+            Token::IntLiteral(9),
+        ];
+        assert_input_tokens!(lexer_mod: self::lexer, in: input, expect: expected);
+    }
+
+    #[test]
+    fn test_lex_bin_literal() {
+        let input = "0b101 0b001001 0b10_10";
+        let expected = [
+            Token::IntLiteral((1 << 2) + 1),
+            Token::IntLiteral((1 << 3) + 1),
+            Token::IntLiteral((1 << 3) + (1 << 1)),
+        ];
+        assert_input_tokens!(lexer_mod: self::lexer, in: input, expect: expected);
+    }
+}
+
+#[cfg(test)]
+mod num {
+    mod lexer {
+        use lex::rules::{PTN_NUM, convert_num};
+
+        lexer![
+            PTN_NUM         => convert_num          => NumLiteral<f64>,
+        ];
+    }
+
+    use self::lexer::Token;
+
+    #[test]
+    fn test_float() {
+        let input = "42.0 5.3 0.4 4.4e2";
+        let expected = [
+            Token::NumLiteral(42.0),
+            Token::NumLiteral(5.3),
+            Token::NumLiteral(0.4),
+            Token::NumLiteral(440.0),
+        ];
+        assert_input_tokens!(lexer_mod: self::lexer, in: input, expect: expected);
+    }
+
+    #[test]
+    fn test_int() {
+        let input = "42 5 0 440";
+        let expected = [
+            Token::NumLiteral(42.0),
+            Token::NumLiteral(5.0),
+            Token::NumLiteral(0.0),
+            Token::NumLiteral(440.0),
+        ];
+        assert_input_tokens!(lexer_mod: self::lexer, in: input, expect: expected);
+    }
+}
+
+#[cfg(test)]
+mod bool {
+    mod lexer {
+        use lex::rules::{PTN_BOOL, convert_bool};
+
+        lexer![
+            PTN_BOOL         => convert_bool          => BoolLiteral<bool>,
+        ];
+    }
+
+    use self::lexer::Token;
+
+    #[test]
+    fn test_lex_bool_literal() {
+        let input = "true false false";
+        let expected = [
+            Token::BoolLiteral(true),
+            Token::BoolLiteral(false),
+            Token::BoolLiteral(false),
+        ];
+        assert_input_tokens!(lexer_mod: self::lexer, in: input, expect: expected);
+    }
+
+}
+
+#[cfg(test)]
+mod string {
+    mod lexer {
+        use lex::rules::{PTN_STRING, convert_string};
+
+        lexer![
+            PTN_STRING      => convert_string       => StringLiteral<String>,
+        ];
+    }
+
+    use self::lexer::Token;
+    use span::{Span, Position};
+    use errors::{Error, MultiError, ErrorKind};
+    use lex::errors::Error as LexError;
+    use lex::errors::ErrorKind as LexErrorKind;
+
+    #[test]
+    fn test_lex_string_literal() {
+        // basic strings and escapes
+        let input = r#""hello there" "all you people ☺" "how\nare you \"doing\"?""#;
+        let expected = [
+            Token::StringLiteral("hello there".to_string()),
+            Token::StringLiteral("all you people ☺".to_string()),
+            Token::StringLiteral("how\nare you \"doing\"?".to_string()),
+        ];
+        assert_input_tokens!(lexer_mod: self::lexer, in: input, expect: expected);
+
+        // one-byte escapes
+        let input = r#""\x41\x2D\x5A" "\x61\x2D\x7A" "\x30\x2D\x39""#;
+        let expected = [
+            Token::StringLiteral("A-Z".to_string()),
+            Token::StringLiteral("a-z".to_string()),
+            Token::StringLiteral("0-9".to_string()),
+        ];
+        assert_input_tokens!(lexer_mod: self::lexer, in: input, expect: expected);
+
+        // unicode escapes
+        let input = r#" "\u{263A}\u{2639}" "\u{1F525}" "\u{1F37E}\u{1F37F}" "#;
+        let expected = [
+            Token::StringLiteral("☺☹".to_string()),
+            Token::StringLiteral("🔥".to_string()),
+            Token::StringLiteral("🍾🍿".to_string()),
+        ];
+        assert_input_tokens!(lexer_mod: self::lexer, in: input, expect: expected);
+
+        //invalid escape codes
+        let input = r#""\☺""#;
+        assert_unrecognized_token!(lexer_mod: self::lexer, in: input,
+            expect_span: Span::new(r#""\☺""#, Position::new(0, 1, 1), Position::new(6, 1, 5)));
+
+        let input = r#""\q""#;
+        assert_unrecognized_token!(lexer_mod: self::lexer, in: input,
+            expect_span: Span::new(r#""\q""#, Position::new(0, 1, 1), Position::new(4, 1, 5)));
+
+        let input = r#""\x4☺""#;
+        assert_unrecognized_token!(lexer_mod: self::lexer, in: input,
+            expect_span: Span::new(r#""\x4☺""#, Position::new(0, 1, 1), Position::new(8, 1, 7)));
+
+        let input = r#""\xFF""#;
+        match self::lexer::lex(input) {
+            Ok(_) => { panic!("Expected lex error, but succeeded."); },
+            Err(MultiError { errors, .. }) => {
+                assert_eq!(errors.len(), 1);
+                match errors[0] {
+                    Error {
+                        origin: ErrorKind::LexToken(LexError { ref kind, .. }),
+                        span
+                    } => {
+                        match *kind {
+                            LexErrorKind::EscapeUtf8Error(_) => {
+                                assert_eq!(span, Some(Span::new_from(r#""\xFF""#,
+                                    Position::new(0, 1, 1))));
+                            },
+                            ref e => {
+                                panic!("Expected EscapeUtf8Error, found {:?}", e);
+                            }
+                        }
+                    },
+                    ref e => { panic!("Expected LexToken error, found {:?}", e); }
+                }
+            }
+        }
+    }
+
+}
+
+#[cfg(test)]
+mod identifier {
+    mod lexer {
+        use lex::rules::{PTN_IDENTIFIER, convert_identifier};
+
+        lexer![
+            PTN_IDENTIFIER  => convert_identifier   => Identifier<String>,
+        ];
+    }
+
+    use self::lexer::Token;
+    use span::{Span, Position};
+
+    #[test]
+    fn test_lex_identifiers() {
+        let input = "foo bar baz ª··9ℼ     ℝℨℤℤↈ９";
+        let expected = [
+            Token::Identifier("foo".to_string()),
+            Token::Identifier("bar".to_string()),
+            Token::Identifier("baz".to_string()),
+            Token::Identifier("ª··9ℼ".to_string()), // ª is XID_Start, rest are XID_Continue
+            Token::Identifier("ℝℨℤℤↈ９".to_string()), // ℝ is XID_Start, rest are XID_Continue
+        ];
+        assert_input_tokens!(lexer_mod: self::lexer, in: input, expect: expected);
+
+        let input = " ９uise"; // ９ is XID_Continue but not XID_Start
+        assert_unrecognized_token!(lexer_mod: self::lexer, in: input,
+            expect_span: Span::new(" ９uise", Position::new(1, 1, 2), Position::new(4, 1, 3)));
+    }
+}
+
+#[cfg(test)]
+mod multiline {
+
+    mod lexer {
+        use lex::rules::{PTN_IDENTIFIER, convert_identifier};
+
+        lexer![
+            r"\+"                                   => Plus,
+            r"="                                    => Equal,
+
+            r","                                    => Comma,
+            r";"                                    => Semicolon,
+
+            r"\("                                   => LParen,
+            r"\)"                                   => RParen,
+            r"\{"                                   => LBrace,
+            r"\}"                                   => RBrace,
+
+            r"let"                                  => Let,
+            r"fn"                                   => Function,
+
+            PTN_IDENTIFIER  => convert_identifier   => Identifier<String>,
+        ];
+    }
+
+    use self::lexer::Token;
+    use span::{Span, Position, Spanned};
+
+    #[test]
+    fn test_multiline() {
+        let input = "
+let add = fn(x, y) {
+    x + y;
+};
+        ";
+        let new_sptok = |tok, start, end| {
+            Spanned::new(tok, Span::new(&input, start, end))
+        };
+        let expected = [
+            new_sptok(Token::Let, Position::new(1, 2, 1), Position::new(4, 2, 4)),
+            new_sptok(Token::Identifier("add".to_string()), Position::new(5, 2, 5),
+                Position::new(8, 2, 8)),
+            new_sptok(Token::Equal, Position::new(9, 2, 9), Position::new(10, 2, 10)),
+            new_sptok(Token::Function,  Position::new(11, 2, 11), Position::new(13, 2, 13)),
+            new_sptok(Token::LParen, Position::new(13, 2, 13), Position::new(14, 2, 14)),
+            new_sptok(Token::Identifier("x".to_string()), Position::new(14, 2, 14),
+                Position::new(15, 2, 15)),
+            new_sptok(Token::Comma, Position::new(15, 2, 15), Position::new(16, 2, 16)),
+            new_sptok(Token::Identifier("y".to_string()), Position::new(17, 2, 17),
+                Position::new(18, 2, 18)),
+            new_sptok(Token::RParen, Position::new(18, 2, 18), Position::new(19, 2, 19)),
+            new_sptok(Token::LBrace, Position::new(20, 2, 20), Position::new(21, 2, 21)),
+            new_sptok(Token::Identifier("x".to_string()), Position::new(26, 3, 5),
+                Position::new(27, 3, 6)),
+            new_sptok(Token::Plus, Position::new(28, 3, 7), Position::new(29, 3, 8)),
+            new_sptok(Token::Identifier("y".to_string()), Position::new(30, 3, 9),
+                Position::new(31, 3, 10)),
+            new_sptok(Token::Semicolon, Position::new(31, 3, 10), Position::new(32, 3, 11)),
+            new_sptok(Token::RBrace, Position::new(33, 4, 1), Position::new(34, 4, 2)),
+            new_sptok(Token::Semicolon, Position::new(34, 4, 2), Position::new(35, 4, 3)),
+        ];
+
+
+        assert_input_tokens!(match_span; lexer_mod: self::lexer, in: input, expect: expected);
     }
 }

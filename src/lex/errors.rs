@@ -2,8 +2,8 @@ use std::{self, fmt};
 
 #[derive(Debug)]
 pub struct Error<'a> {
-    match_str: &'a str,
-    kind: ErrorKind,
+    pub match_str: &'a str,
+    pub kind: ErrorKind,
 }
 impl<'a> Error<'a> {
     pub fn new(match_str: &'a str, kind: ErrorKind) -> Error<'a> {

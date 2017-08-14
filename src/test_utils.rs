@@ -1,3 +1,97 @@
+
+#[macro_export]
+macro_rules! assert_spanned_match {
+    (
+        match_span;
+        $actual:expr,
+        $expected:expr
+    ) => ({
+        assert_eq!($actual, $expected);
+    });
+
+    (
+        match_item;
+        $actual:expr,
+        $expected:expr
+    ) => ({
+        assert_eq!(&$actual.item, $expected);
+    });
+}
+
+#[macro_export]
+macro_rules! assert_input_tokens {
+    (
+        in: $input:expr,
+        expect: $expected:expr
+    ) => ({
+        assert_input_tokens!(lexer_mod: lexer, in: $input, expect: $expected);
+    });
+
+    (
+        $match_span:tt;
+        in: $input:expr,
+        expect: $expected:expr
+    ) => ({
+        assert_input_tokens!($match_span; lexer_mod: lexer, in: $input,
+            expect: $expected);
+    });
+
+    (
+        lexer_mod: $lexer_mod:path,
+        in: $input:expr,
+        expect: $expected:expr
+    ) => ({
+        assert_input_tokens!(match_item; lexer_mod: $lexer_mod, in: $input,
+            expect: $expected);
+    });
+
+    (
+        $match_span:tt;
+        lexer_mod: $lexer_mod:path,
+        in: $input:expr,
+        expect: $expected:expr
+    ) => ({
+        use $lexer_mod as lexer_mod;
+
+        let tokens = lexer_mod::lex($input).unwrap();
+        let expected = $expected;
+        println!("tokens: {:?} {}", tokens, tokens.len());
+        println!("expected: {:?} {}", expected, expected.len());
+        assert_eq!(tokens.len(), expected.len());
+        for (parsed_tok, expected_tok) in tokens.iter().zip(expected.iter()) {
+            assert_spanned_match!($match_span; parsed_tok, expected_tok);
+        }
+    })
+}
+
+#[macro_export]
+macro_rules! assert_unrecognized_token {
+    (
+        in: $input:expr,
+        expect_span: $expected:expr
+    ) => ({
+        assert_unrecognized_token!(lexer_mod: lexer, in: $input, expect_span: $expected);
+    });
+
+    (
+        lexer_mod: $lexer_mod:path,
+        in: $input:expr,
+        expect_span: $expected:expr
+    ) => ({
+        use $crate::errors::MultiError;
+        use $lexer_mod as lexer_mod;
+        let expected_span = $expected;
+
+        match lexer_mod::lex($input) {
+            Ok(_) => { panic!("No unrecognized tokens input"); }
+            Err(MultiError { errors, .. })  => {
+                assert_eq!(errors.len(), 1);
+                assert_eq!(errors[0].span, Some(expected_span));
+            }
+        }
+    });
+}
+
 #[macro_export]
 macro_rules! assert_value_matches {
     (

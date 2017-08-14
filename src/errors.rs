@@ -41,8 +41,8 @@ impl<'a> std::error::Error for Error<'a> {
 
 #[derive(Debug)]
 pub struct MultiError<'a> {
-    message: String,
-    errors: Vec<Error<'a>>,
+    pub message: String,
+    pub errors: Vec<Error<'a>>,
 }
 impl<'a> MultiError<'a> {
     pub fn new(message: String, errors: Vec<Error<'a>>) -> MultiError<'a> {
