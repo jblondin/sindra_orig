@@ -52,8 +52,8 @@ macro_rules! statement_args {
 
 #[macro_export]
 macro_rules! statement_body {
-    ($cursor:ident, $prec_ty:ty; ) => (); // endpoint
-    ($cursor:ident, $prec_ty:ty; identifier<$ident_name:ident> $($rest:tt)*) => (
+    ($cursor:ident, $last_span:ident, $prec_ty:ty; ) => (); // endpoint
+    ($cursor:ident, $last_span:ident, $prec_ty:ty; identifier<$ident_name:ident> $($rest:tt)*) => (
         let $ident_name = {
             if $cursor.has_next() {
                 match parse_identifier($cursor) {
@@ -65,9 +65,10 @@ macro_rules! statement_body {
                 return Ok(None);
             }
         };
-        statement_body!($cursor, $prec_ty; $($rest)*);
+        $last_span = Some($ident_name.span);
+        statement_body!($cursor, $last_span, $prec_ty; $($rest)*);
     );
-    ($cursor:ident, $prec_ty:ty; expression<$expr_name:ident> $($rest:tt)*) => (
+    ($cursor:ident, $last_span:ident, $prec_ty:ty; expression<$expr_name:ident> $($rest:tt)*) => (
         let $expr_name = {
             if $cursor.has_next() {
                 match parse_expression($cursor, <$prec_ty>::lowest()) {
@@ -84,20 +85,22 @@ macro_rules! statement_body {
                 return Ok(None);
             }
         };
-        statement_body!($cursor, $prec_ty; $($rest)*);
+        $last_span = Some($expr_name.span);
+        statement_body!($cursor, $last_span, $prec_ty; $($rest)*);
     );
-    ($cursor:ident, $prec_ty:ty; token<$tok:path> $($rest:tt)*) => (
-        {
+    ($cursor:ident, $last_span:ident, $prec_ty:ty; token<$tok:path> $($rest:tt)*) => (
+        $last_span = {
             if let Some(curr_tok) = $cursor.next() {
                 if !curr_tok.spans_item(&$tok)  {
                     // token doesn't match pattern, return none
                     return Ok(None);
                 }
+                Some(curr_tok.span)
             } else {
                 // input ended without finishing the match, return none
                 return Ok(None);
             }
-        }
-        statement_body!($cursor, $prec_ty; $($rest)*);
+        };
+        statement_body!($cursor, $last_span, $prec_ty; $($rest)*);
     );
 }
