@@ -98,10 +98,31 @@ macro_rules! assert_program_matches {
         in: $input:expr,
         expect: $expected:expr
     ) => ({
-        assert_value_matches!(lexer_mod: lexer, parser_mod: parser, in: $input, expect: $expected);
+        assert_program_matches!(match_item; lexer_mod: lexer, parser_mod: parser, in: $input,
+            expect: $expected);
     });
 
     (
+        $match_span:tt;
+        in: $input:expr,
+        expect: $expected:expr
+    ) => ({
+        assert_program_matches!($match_span; lexer_mod: lexer, parser_mod: parser, in: $input,
+            expect: $expected);
+    });
+
+    (
+        lexer_mod: $lexer_mod:path,
+        parser_mod: $parser_mod:path,
+        in: $input:expr,
+        expect: $expected:expr
+    ) => ({
+        assert_program_matches!(match_item; lexer_mod: $lexer_mod, parser_mod: $parser_mod,
+            in: $input, expect: $expected);
+    });
+
+    (
+        $match_span:tt;
         lexer_mod: $lexer_mod:path,
         parser_mod: $parser_mod:path,
         in: $input:expr,
@@ -113,7 +134,7 @@ macro_rules! assert_program_matches {
         let program = parser_mod::parse(&tokens).unwrap();
         println!("{:#?}", program);
         for (parsed_statement, expected_statement) in program.iter().zip($expected.iter()) {
-            assert_eq!(&parsed_statement.item, expected_statement);
+            assert_spanned_match!($match_span; parsed_statement, expected_statement);
         }
     });
 }
