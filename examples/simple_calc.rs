@@ -49,7 +49,7 @@ mod parser {
     // no block statement handling in this example
     block_tokens![Token: None];
     // specify the token enum variant used as Identifiers
-    identifier_token![Token: Token::Identifier, String];
+    identifier_token![Token: Token::Identifier];
 
     parser![
         // specify the token enum

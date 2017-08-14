@@ -48,7 +48,7 @@ impl $token_type {
 }
 
     );
-    ($token_type:ty: $identifier_token:path, $identifier_type:ty) => (
+    ($token_type:ty: $identifier_token:path) => (
 
 impl $token_type {
     fn is_identifier_token(&self) -> bool {
@@ -57,9 +57,9 @@ impl $token_type {
             _ => false,
         }
     }
-    fn extract_identifier(&self) -> Option<$identifier_type> {
+    fn extract_identifier(&self) -> Option<String> {
         match *self {
-            $identifier_token(ref ident_name) => Some(ident_name.clone()),
+            $identifier_token(ref ident_name) => Some(ident_name.to_string()),
             _ => None,
         }
     }
@@ -758,7 +758,7 @@ mod statements {
 
         group_tokens![Token: Token::LParen, Token::RParen];
         block_tokens![Token: Token::LBrace, Token::RBrace];
-        identifier_token![Token: Token::Identifier, String];
+        identifier_token![Token: Token::Identifier];
 
         parser![
             token_type: Token,

@@ -27,7 +27,7 @@ mod parser {
 
     group_tokens![Token: None];
     block_tokens![Token: Token::LBrace, Token::RBrace];
-    identifier_token![Token: Token::Identifier, String];
+    identifier_token![Token: Token::Identifier];
 
     parser![
         token_type: Token,
