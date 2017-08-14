@@ -93,6 +93,32 @@ macro_rules! assert_unrecognized_token {
 }
 
 #[macro_export]
+macro_rules! assert_program_matches {
+    (
+        in: $input:expr,
+        expect: $expected:expr
+    ) => ({
+        assert_value_matches!(lexer_mod: lexer, parser_mod: parser, in: $input, expect: $expected);
+    });
+
+    (
+        lexer_mod: $lexer_mod:path,
+        parser_mod: $parser_mod:path,
+        in: $input:expr,
+        expect: $expected:expr
+    ) => ({
+        use $parser_mod as parser_mod;
+        use $lexer_mod as lexer_mod;
+        let tokens = lexer_mod::lex($input).unwrap();
+        let program = parser_mod::parse(&tokens).unwrap();
+        println!("{:#?}", program);
+        for (parsed_statement, expected_statement) in program.iter().zip($expected.iter()) {
+            assert_eq!(&parsed_statement.item, expected_statement);
+        }
+    });
+}
+
+#[macro_export]
 macro_rules! assert_value_matches {
     (
         in: $input:expr,
