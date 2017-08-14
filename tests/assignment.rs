@@ -180,7 +180,6 @@ mod evaluator_return_empty {
     }
 }
 
-
 mod evaluator_disallowed_redeclare {
 
     evaluator![
@@ -212,5 +211,55 @@ mod evaluator_disallowed_redeclare {
         assert_error!(in: r#"let x = 14;"#, eval: evaluator,
             match: "attempt to redeclare variable 'x'", err: ErrorKind::Eval,
             start: Position::new(0, 1, 5), end: Some(Position::new(0, 1, 11)));
+    }
+}
+
+mod memory {
+
+    evaluator![
+        ast_module: super::parser,
+        values: [
+            Literal::Int => Int<i64>
+        ],
+        eval_statement: [
+            Statement::AssignmentStmt((ident, expr)) =>
+                eval_assignment(ident, expr, AssignReturn::Assigned),
+            Statement::DeclarationStmt((ident, expr)) =>
+                eval_declaration(ident, expr, Redeclare::Disallowed, AssignReturn::Assigned),
+            Statement::ExpressionStmt(expr) => eval_expression(expr)
+        ],
+    ];
+
+    #[test]
+    fn test() {
+        let mut evaluator = Evaluator::new();
+        // x initialize to 5
+        assert_value_matches!(in: r#"let x = 5;"#, eval: evaluator, expect: Value::Int(5));
+        // x should be set to 2 and 2 returned
+        assert_value_matches!(in: r#"x = 2;"#, eval: evaluator, expect: Value::Int(2));
+        // value of 'x' should be 2 as this point
+        assert_value_matches!(in: r#"x"#, eval: evaluator, expect: Value::Int(2));
+
+        // declare a variable in a block, and use it to reset the value of 'x'.
+        // the block should return 6 (since the last assignment value returns 6),
+        // and 'x' should be set to 6 after the block
+        assert_value_matches!(in: r#"{ let y = 6; x = y; }"#, eval: evaluator,
+            expect: Value::Int(6));
+        assert_value_matches!(in: r#"x"#, eval: evaluator, expect: Value::Int(6));
+
+        // since 'y' was only declared in child block, should not be defined here
+        assert_error!(in: r#"y"#, eval: evaluator,
+            match: "identifier not found: 'y'", err: ErrorKind::Eval,
+            start: Position::new(0, 1, 1), end: Some(Position::new(1, 1, 2)));
+
+        // since 'y' doesn't exist, can declare it with no problem (even though
+        // Redeclare::Disallowed is set)
+        assert_value_matches!(in: r#"let y = 8;"#, eval: evaluator, expect: Value::Int(8));
+        assert_value_matches!(in: r#"y"#, eval: evaluator, expect: Value::Int(8));
+
+        // we can shadow 'y' in child block
+        assert_value_matches!(in: r#"{ let y = 10; }"#, eval: evaluator, expect: Value::Int(10));
+        // but it remains unchanged in parent
+        assert_value_matches!(in: r#"y"#, eval: evaluator, expect: Value::Int(8));
     }
 }

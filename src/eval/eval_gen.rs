@@ -335,7 +335,7 @@ macro_rules! evaluator {
 #[cfg(test)]
 mod tests {
     // this test just exist to make sure the macro compiles correctly and produces the appropriate
-    // objects; real tests of the full lexer-parser-evaluator system will be in integration tests
+    // objects; tests of the full lexer-parser-evaluator system will be in integration tests
 
     mod lexer {
         use lex::rules::{
