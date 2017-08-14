@@ -108,6 +108,10 @@ pub trait FromToken<T>: Sized {
     fn from_token(tok: &T) -> Option<Self>;
 }
 
+pub trait IntoExpr<'a> {
+    fn into_expr(self) -> Expression<'a>;
+}
+
 type SpannedToken<'a> = Spanned<'a, $token_type>;
 
 pub type Program<'a> = Block<'a>;
@@ -180,6 +184,22 @@ pub enum Expression<'a> {
     Block(Block<'a>),
 }
 type SpannedExpr<'a> = Spanned<'a, Expression<'a>>;
+
+impl<'a> IntoExpr<'a> for Block<'a> {
+    fn into_expr(self) -> Expression<'a> {
+        Expression::Block(self)
+    }
+}
+impl<'a> IntoExpr<'a> for Literal {
+    fn into_expr(self) -> Expression<'a> {
+        Expression::Literal(self)
+    }
+}
+impl<'a> IntoExpr<'a> for Identifier {
+    fn into_expr(self) -> Expression<'a> {
+        Expression::Identifier(self)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PrefixOp {
