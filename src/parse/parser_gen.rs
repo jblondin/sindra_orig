@@ -364,11 +364,10 @@ mod _parse_statement {
     use super::*;
 
     $(
-        #[allow(non_snake_case)]
+        #[allow(non_snake_case, unused_assignments)]
         pub fn $statement_name<'a>(cursor: &mut ParserCursor<'a>)
                 -> errors::ResOpt<'a, Spanned<'a, Statement<'a>>> {
             if let Some(&&Spanned { span: start_span, .. }) = cursor.peek() {
-                #[allow(unused_assignments)]
                 let mut last_span = None;
                 statement_body!(cursor, last_span, $precedence_type; $($statement_tt)*);
                 // there were enough tokens, and they all matched!
