@@ -684,30 +684,52 @@ macro_rules! parser {
 }
 
 #[cfg(test)]
-#[allow(dead_code)]
-mod simple_calc {
+macro_rules! impl_test_lexer {
+    () => (
 
-    mod lexer {
-        use lex::rules::{
-            PTN_INT, convert_int,
-        };
+mod test_lexer {
+    use lex::rules::{
+        PTN_INT, convert_int,
+        PTN_FLOAT, convert_float,
+        PTN_IDENTIFIER, convert_identifier,
+    };
+    lexer![
+        r"\("                                   => LParen,
+        r"\)"                                   => RParen,
+        r"\{"                                   => LBrace,
+        r"\}"                                   => RBrace,
 
-        lexer![
-            r"\("                                   => LParen,
-            r"\)"                                   => RParen,
-            r"\+"                                   => Plus,
-            r"\*"                                   => Asterisk,
-            PTN_INT         => convert_int          => IntLiteral<i64>,
-        ];
-    }
+        r"\+"                                   => Plus,
+        r"-"                                    => Minus,
+        r"\*"                                   => Asterisk,
+        r"/"                                    => Slash,
+
+        r"="                                    => Equal,
+
+        r"add"                                  => Add,
+        r"to"                                   => To,
+        r"let"                                  => Let,
+
+        PTN_INT         => convert_int          => IntLiteral<i64>,
+        PTN_FLOAT       => convert_float        => FloatLiteral<f64>,
+        PTN_IDENTIFIER  => convert_identifier   => Identifier<String>,
+    ];
+}
+
+    );
+}
+
+#[cfg(test)]
+mod expression_statement {
+
+    impl_test_lexer![];
 
     mod parser {
-        use super::lexer::Token;
-        use parse::precedence::StandardPrecedence;
+        use super::test_lexer::Token;
 
-        group_tokens![Token: Token::LParen, Token::RParen];
+        group_tokens![Token: None];
         block_tokens![Token: None];
-        identifier_token![Token: None];
+        identifier_token![Token: Token::Identifier];
 
         parser![
             token_type: Token,
@@ -717,78 +739,456 @@ mod simple_calc {
             literals: [
                 Token::IntLiteral => Integer<i64>,
             ],
-            infix: [
-                Token::Asterisk => Multiply   => StandardPrecedence::Product,
-                Token::Plus     => Add        => StandardPrecedence::Sum,
-            ]
         ];
     }
 
-    use span::Spanned;
+    use self::parser::{Statement, Literal, Identifier, IntoExpr};
+    use span::{Position, Spanned};
 
     #[test]
-    fn test_simple_calc() {
-        let tokens: Vec<Spanned<lexer::Token>> = lexer::lex("5 * (9 + 2)").unwrap();
-        println!("{:?}", tokens);
-        let ast = parser::parse(&tokens);
-        println!("{:?}", ast);
-
+    fn test() {
+        let input = "aa b 5 ℝℨℤℤↈ";
+        let expected = vec![
+            Statement::ExpressionStmt(Spanned::new_pos(Identifier::new("aa").into_expr(), input,
+                Position::new(0, 1, 1), Position::new(2, 1, 3))),
+            Statement::ExpressionStmt(Spanned::new_pos(Identifier::new("b").into_expr(), input,
+                Position::new(3, 1, 4), Position::new(4, 1, 5))),
+            Statement::ExpressionStmt(Spanned::new_pos(Literal::Integer(5).into_expr(), input,
+                Position::new(5, 1, 6), Position::new(6, 1, 7))),
+            Statement::ExpressionStmt(Spanned::new_pos(Identifier::new("ℝℨℤℤↈ").into_expr(), input,
+                Position::new(7, 1, 8), Position::new(22, 1, 13))),
+        ];
+        assert_program_matches!(lexer_mod: self::test_lexer, parser_mod: self::parser,
+            in: input, expect: &expected);
     }
 }
 
 #[cfg(test)]
-#[allow(dead_code, unused_variables)]
-mod statements {
+mod infix_expressions {
+
+    impl_test_lexer![];
 
 
-    mod lexer {
-        use lex::rules::{
-            PTN_INT, convert_int,
-            PTN_IDENTIFIER, convert_identifier,
-        };
-        lexer![
-            r"\("                                   => LParen,
-            r"\)"                                   => RParen,
-            r"\{"                                   => LBrace,
-            r"\}"                                   => RBrace,
-            r"add"                                  => Add,
-            r"to"                                   => To,
-            PTN_INT         => convert_int          => IntLiteral<i64>,
-            PTN_IDENTIFIER  => convert_identifier   => Identifier<String>,
+    mod parser {
+        use super::test_lexer::Token;
+        use parse::precedence::StandardPrecedence;
+
+        group_tokens![Token: None];
+        block_tokens![Token: None];
+        identifier_token![Token: Token::Identifier];
+
+        parser![
+            token_type: Token,
+            statements: [
+                ExpressionStmt(expression<value>) := {expression<value>},
+            ],
+            literals: [
+                Token::IntLiteral   => Integer<i64>,
+                Token::FloatLiteral => Float<f64>,
+            ],
+            infix: [
+                Token::Plus     => Add        => StandardPrecedence::Sum,
+                Token::Minus    => Minus      => StandardPrecedence::Sum,
+                Token::Asterisk => Multiply   => StandardPrecedence::Product,
+                Token::Slash    => Divide     => StandardPrecedence::Product,
+            ]
         ];
     }
 
+    use self::parser::{Statement, Literal, Expression, InfixOp, Identifier, IntoExpr};
+    use span::{Position, Spanned};
+
+    #[test]
+    fn test() {
+        let input = "a + b";
+        println!("-- {} --", input);
+        let expected = vec![
+            Statement::ExpressionStmt(
+                Spanned::new_pos(
+                    Expression::Infix {
+                        op: InfixOp::Add,
+                        left: Box::new(Spanned::new_pos(Identifier::new("a").into_expr(), input,
+                            Position::start(), Position::new(1, 1, 2))),
+                        right: Box::new(Spanned::new_pos(Identifier::new("b").into_expr(), input,
+                            Position::new(4, 1, 5), Position::new(5, 1, 6)))
+                    },
+                    input,
+                    Position::start(),
+                    Position::new(5, 1, 6)
+                )
+            )
+        ];
+        assert_program_matches!(lexer_mod: self::test_lexer, parser_mod: self::parser,
+            in: input, expect: &expected);
+
+        let input = "a + 5.2";
+        println!("-- {} --", input);
+        let expected = vec![
+            Statement::ExpressionStmt(
+                Spanned::new_pos(
+                    Expression::Infix {
+                        op: InfixOp::Add,
+                        left: Box::new(Spanned::new_pos(Identifier::new("a").into_expr(), input,
+                            Position::start(), Position::new(1, 1, 2))),
+                        right: Box::new(Spanned::new_pos(Literal::Float(5.2).into_expr(), input,
+                            Position::new(4, 1, 5), Position::new(7, 1, 8)))
+                    },
+                    input,
+                    Position::start(),
+                    Position::new(7, 1, 8)
+                )
+            )
+        ];
+        assert_program_matches!(lexer_mod: self::test_lexer, parser_mod: self::parser,
+            in: input, expect: &expected);
+
+        let input = "a - b * 5.2";
+        println!("-- {} --", input);
+        let expected = vec![
+            Statement::ExpressionStmt(
+                Spanned::new_pos(
+                    Expression::Infix {
+                        op: InfixOp::Minus,
+                        left: Box::new(Spanned::new_pos(Identifier::new("a").into_expr(), input,
+                            Position::start(), Position::new(1, 1, 2))),
+                        right: Box::new(Spanned::new_pos(
+                            Expression::Infix {
+                                op: InfixOp::Multiply,
+                                left: Box::new(Spanned::new_pos(Identifier::new("b").into_expr(),
+                                    input, Position::new(4, 1, 5), Position::new(5, 1, 6))),
+                                right: Box::new(Spanned::new_pos(Literal::Float(5.2).into_expr(),
+                                    input, Position::new(8, 1, 9), Position::new(11, 1, 12)))
+                            },
+                            input,
+                            Position::new(4, 1, 5),
+                            Position::new(11, 1, 12)
+                        ))
+                    },
+                    input,
+                    Position::start(),
+                    Position::new(11, 1, 12)
+                )
+            )
+        ];
+        assert_program_matches!(lexer_mod: self::test_lexer, parser_mod: self::parser,
+            in: input, expect: &expected);
+    }
+}
+
+#[cfg(test)]
+mod grouped_expressions {
+
+    impl_test_lexer![];
+
+
     mod parser {
-        use super::lexer::Token;
+        use super::test_lexer::Token;
         use parse::precedence::StandardPrecedence;
 
         group_tokens![Token: Token::LParen, Token::RParen];
+        block_tokens![Token: None];
+        identifier_token![Token: Token::Identifier];
+
+        parser![
+            token_type: Token,
+            statements: [
+                ExpressionStmt(expression<value>) := {expression<value>},
+            ],
+            literals: [
+                Token::IntLiteral   => Integer<i64>,
+                Token::FloatLiteral => Float<f64>,
+            ],
+            infix: [
+                Token::Plus     => Add        => StandardPrecedence::Sum,
+                Token::Minus    => Minus      => StandardPrecedence::Sum,
+                Token::Asterisk => Multiply   => StandardPrecedence::Product,
+                Token::Slash    => Divide     => StandardPrecedence::Product,
+            ]
+        ];
+    }
+
+    use self::parser::{Statement, Literal, Expression, InfixOp, Identifier, IntoExpr};
+    use span::{Position, Spanned};
+
+    #[test]
+    fn test() {
+        let input = "a - (b * 5.2)";
+        println!("-- {} --", input);
+        let expected = vec![
+            Statement::ExpressionStmt(
+                Spanned::new_pos(
+                    Expression::Infix {
+                        op: InfixOp::Minus,
+                        left: Box::new(Spanned::new_pos(Identifier::new("a").into_expr(), input,
+                            Position::start(), Position::new(1, 1, 2))),
+                        right: Box::new(Spanned::new_pos(
+                            Expression::Infix {
+                                op: InfixOp::Multiply,
+                                left: Box::new(Spanned::new_pos(Identifier::new("b").into_expr(),
+                                    input, Position::new(5, 1, 6), Position::new(6, 1, 7))),
+                                right: Box::new(Spanned::new_pos(Literal::Float(5.2).into_expr(),
+                                    input, Position::new(9, 1, 10), Position::new(12, 1, 13)))
+                            },
+                            input,
+                            Position::new(5, 1, 6),
+                            Position::new(12, 1, 13)
+                        ))
+                    },
+                    input,
+                    Position::start(),
+                    Position::new(12, 1, 13)
+                )
+            )
+        ];
+        assert_program_matches!(lexer_mod: self::test_lexer, parser_mod: self::parser,
+            in: input, expect: &expected);
+
+
+        let input = "(a - b) * 5.2";
+        println!("-- {} --", input);
+        let expected = vec![
+            Statement::ExpressionStmt(
+                Spanned::new_pos(
+                    Expression::Infix {
+                        op: InfixOp::Multiply,
+                        left: Box::new(Spanned::new_pos(
+                            Expression::Infix {
+                                op: InfixOp::Minus,
+                                left: Box::new(Spanned::new_pos(Identifier::new("a").into_expr(),
+                                    input, Position::new(1, 1, 2), Position::new(2, 1, 3))),
+                                right: Box::new(Spanned::new_pos(Identifier::new("b").into_expr(),
+                                    input, Position::new(5, 1, 6), Position::new(6, 1, 7)))
+                            },
+                            input,
+                            Position::new(1, 1, 2),
+                            Position::new(6, 1, 7)
+                        )),
+                        right: Box::new(Spanned::new_pos(Literal::Float(5.2).into_expr(), input,
+                            Position::new(10, 1, 11), Position::new(13, 1, 14))),
+                    },
+                    input,
+                    Position::new(1, 1, 2),
+                    Position::new(13, 1, 14)
+                )
+            )
+        ];
+        assert_program_matches!(lexer_mod: self::test_lexer, parser_mod: self::parser,
+            in: input, expect: &expected);
+
+        let input = "(a + b) / (c - d)";
+        println!("-- {} --", input);
+        let expected = vec![
+            Statement::ExpressionStmt(
+                Spanned::new_pos(
+                    Expression::Infix {
+                        op: InfixOp::Divide,
+                        left: Box::new(Spanned::new_pos(
+                            Expression::Infix {
+                                op: InfixOp::Add,
+                                left: Box::new(Spanned::new_pos(Identifier::new("a").into_expr(),
+                                    input, Position::new(1, 1, 2), Position::new(2, 1, 3))),
+                                right: Box::new(Spanned::new_pos(Identifier::new("b").into_expr(),
+                                    input, Position::new(5, 1, 6), Position::new(6, 1, 7))),
+                            },
+                            input,
+                            Position::new(1, 1, 2),
+                            Position::new(6, 1, 7)
+                        )),
+                        right: Box::new(Spanned::new_pos(
+                            Expression::Infix {
+                                op: InfixOp::Minus,
+                                left: Box::new(Spanned::new_pos(Identifier::new("c").into_expr(),
+                                    input, Position::new(11, 1, 12), Position::new(12, 1, 13))),
+                                right: Box::new(Spanned::new_pos(Identifier::new("d").into_expr(),
+                                    input, Position::new(15, 1, 16), Position::new(16, 1, 17))),
+                            },
+                            input,
+                            Position::new(11, 1, 12),
+                            Position::new(16, 1, 17)
+                        )),
+                    },
+                    input,
+                    Position::new(1, 1, 2),
+                    Position::new(16, 1, 17)
+                )
+            )
+        ];
+        assert_program_matches!(lexer_mod: self::test_lexer, parser_mod: self::parser,
+            in: input, expect: &expected);
+
+        let input = "a + b / c - d";
+        let expected = vec![
+            Statement::ExpressionStmt(Spanned::new_pos(
+                Expression::Infix {
+                    op: InfixOp::Minus,
+                    left: Box::new(Spanned::new_pos(
+                        Expression::Infix {
+                            op: InfixOp::Add,
+                            left: Box::new(Spanned::new_pos(Identifier::new("a").into_expr(),
+                                input, Position::new(0, 1, 1), Position::new(1, 1, 2))),
+                            right: Box::new(Spanned::new_pos(
+                                Expression::Infix {
+                                    op: InfixOp::Divide,
+                                    left: Box::new(Spanned::new_pos(
+                                        Identifier::new("b").into_expr(), input,
+                                        Position::new(4, 1, 5), Position::new(5, 1, 6))),
+                                    right: Box::new(Spanned::new_pos(
+                                        Identifier::new("c").into_expr(), input,
+                                        Position::new(8, 1, 9), Position::new(9, 1, 10)))
+                                },
+                                input,
+                                Position::new(4, 1, 5),
+                                Position::new(9, 1, 10)
+                            ))
+                        },
+                        input,
+                        Position::new(0, 1, 1),
+                        Position::new(9, 1, 10)
+                    )),
+                    right: Box::new(Spanned::new_pos(Identifier::new("d").into_expr(),
+                        input, Position::new(12, 1, 13), Position::new(13, 1, 14)))
+                },
+                input,
+                Position::new(0, 1, 1),
+                Position::new(13, 1, 14),
+            ))
+        ];
+        assert_program_matches!(lexer_mod: self::test_lexer, parser_mod: self::parser,
+            in: input, expect: &expected);
+    }
+}
+
+#[cfg(test)]
+mod block_statements {
+
+    impl_test_lexer![];
+
+    mod parser {
+        use super::test_lexer::Token;
+
+        group_tokens![Token: None];
         block_tokens![Token: Token::LBrace, Token::RBrace];
         identifier_token![Token: Token::Identifier];
 
         parser![
             token_type: Token,
             statements: [
-                OtherStmt(expression<value>, expression<operand>) :=
-                    {token<Token::Add> expression<value> token<Token::To> expression<operand>},
+                ExpressionStmt(expression<value>) := {expression<value>},
             ],
-            literals: [
-                Token::IntLiteral => Integer<i64>,
-            ],
-            precedence_type: StandardPrecedence,
-            prefix: (StandardPrecedence::Prefix, []),
-            infix: []
         ];
     }
 
-    use span::Spanned;
+    use self::parser::{Statement, Expression, Identifier, IntoExpr};
+    use span::{Position, Spanned};
 
     #[test]
-    fn test_statement() {
-        let tokens: Vec<Spanned<lexer::Token>> = lexer::lex("add 5 to 9").unwrap();
-        println!("{:?}", tokens);
-        let ast = parser::parse(&tokens);
-        println!("{:?}", ast);
+    fn test() {
+        let input = "a { b } c";
+        let expected = vec![
+            Statement::ExpressionStmt(Spanned::new_pos(Identifier::new("a").into_expr(),
+                input, Position::start(), Position::new(1, 1, 2))),
+            Statement::ExpressionStmt(Spanned::new_pos(
+                Expression::Block(
+                    vec![
+                        Spanned::new_pos(
+                            Statement::ExpressionStmt(
+                                Spanned::new_pos(Identifier::new("b").into_expr(), input,
+                                    Position::new(4, 1, 5), Position::new(5, 1, 6)),
+                            ),
+                            input,
+                            Position::new(4, 1, 5),
+                            Position::new(5, 1, 6)
+                        )
+                    ]
+                ),
+                input,
+                Position::new(4, 1, 5),
+                Position::new(7, 1, 8)
+            )),
+            Statement::ExpressionStmt(Spanned::new_pos(Identifier::new("c").into_expr(),
+                input, Position::new(8, 1, 9), Position::new(9, 1, 10)))
+        ];
+        assert_program_matches!(lexer_mod: self::test_lexer, parser_mod: self::parser,
+            in: input, expect: &expected);
+    }
+}
+
+#[cfg(test)]
+mod alternate_statements {
+
+    impl_test_lexer![];
+
+    mod parser {
+        use super::test_lexer::Token;
+
+        group_tokens![Token: None];
+        block_tokens![Token: None];
+        identifier_token![Token: Token::Identifier];
+
+        parser![
+            token_type: Token,
+            statements: [
+                AddStmt(expression<value>, expression<operand>) :=
+                    {token<Token::Add> expression<value> token<Token::To> expression<operand>},
+                AssignmentStmt(identifier<name>, expression<value>) := {
+                    identifier<name> token<Token::Equal> expression<value>
+                },
+                DeclarationStmt(identifier<name>, expression<value>) := {
+                    token<Token::Let> identifier<name> token<Token::Equal> expression<value>
+                },
+            ],
+            literals: [
+                Token::IntLiteral   => Integer<i64>,
+            ],
+        ];
+    }
+
+    use self::parser::{Statement, Literal, Identifier, IntoExpr};
+    use span::{Position, Spanned};
+
+    #[test]
+    fn test_add_statement() {
+        let input = "add 5 to 9";
+        let expected = vec![
+            Statement::AddStmt((
+                Spanned::new_pos(Literal::Integer(5).into_expr(), input, Position::new(4, 1, 5),
+                    Position::new(5, 1, 6)),
+                Spanned::new_pos(Literal::Integer(9).into_expr(), input, Position::new(9, 1, 10),
+                    Position::new(10, 1, 11))
+            ))
+        ];
+        assert_program_matches!(lexer_mod: self::test_lexer, parser_mod: self::parser,
+            in: input, expect: &expected);
+    }
+
+    #[test]
+    fn test_declare_statement() {
+        let input = "let a = 4";
+        let expected = vec![
+            Statement::DeclarationStmt((
+                Spanned::new_pos(Identifier::new("a"), input, Position::new(4, 1, 5),
+                    Position::new(5, 1, 6)),
+                Spanned::new_pos(Literal::Integer(4).into_expr(), input, Position::new(8, 1, 9),
+                    Position::new(9, 1, 10)),
+            ))
+        ];
+        assert_program_matches!(lexer_mod: self::test_lexer, parser_mod: self::parser,
+            in: input, expect: &expected);
+    }
+
+    #[test]
+    fn test_assign_statement() {
+        let input = "a = 4";
+        let expected = vec![
+            Statement::AssignmentStmt((
+                Spanned::new_pos(Identifier::new("a"), input, Position::new(0, 1, 1),
+                    Position::new(1, 1, 2)),
+                Spanned::new_pos(Literal::Integer(4).into_expr(), input, Position::new(4, 1, 5),
+                    Position::new(5, 1, 6)),
+            ))
+        ];
+        assert_program_matches!(lexer_mod: self::test_lexer, parser_mod: self::parser,
+            in: input, expect: &expected);
     }
 }
 
