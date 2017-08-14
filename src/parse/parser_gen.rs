@@ -130,6 +130,7 @@ pub enum Literal {
     $($literal_name($literal_type),)*
 }
 impl fmt::Display for Literal {
+    #[allow(unused_variables)]
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
             $(
@@ -671,7 +672,7 @@ macro_rules! parser {
             [
                 token_type,
                 statements,
-                literals,
+                literals([]),
                 precedence_type($crate::parse::precedence::StandardPrecedence),
                 prefix(($crate::parse::precedence::StandardPrecedence::Prefix, [])),
                 infix([]),
