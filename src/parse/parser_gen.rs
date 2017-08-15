@@ -356,8 +356,8 @@ fn parse_statement<'a>(cursor: &mut ParserCursor<'a>) -> errors::Result<'a, Span
     )*
 
     // no statements matched
-    // TOOD: improve error reporting here
-    Err(errors::Error::nospan(errors::ErrorKind::Parse("no statement found".to_string())))
+    Err(errors::Error::spanned(errors::ErrorKind::Parse("no matching statement".to_string()),
+        cursor.peek().unwrap().span))
 }
 
 mod _parse_statement {

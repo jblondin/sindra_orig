@@ -119,6 +119,15 @@ impl<'a> Span<'a> {
             None => &self.input[self.start.byte..]
         }
     }
+    pub fn context(&self) -> String {
+        let row_prefix = format!("{}: ", self.start.row);
+        let line = self.input.lines().skip(self.start.row - 1).next();
+        let caret = " ".repeat(row_prefix.len() + self.start.column - 1) + "^";
+        match line {
+            Some(line) => "\n".to_string() + &row_prefix + line + "\n" + &caret,
+            None => String::new()
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
