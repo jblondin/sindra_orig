@@ -38,6 +38,7 @@ pub enum ErrorKind {
     EscapeStr(String),
     EscapeUtf8Error(std::str::Utf8Error),
     EscapeIntError(std::num::ParseIntError),
+    Custom(Box<std::error::Error>),
 }
 impl fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -52,12 +53,16 @@ impl fmt::Display for ErrorKind {
                 => write!(f, "{}: {}", (self as &::std::error::Error).description(), e),
             ErrorKind::EscapeIntError(ref e)
                 => write!(f, "{}: {}", (self as &::std::error::Error).description(), e),
+            ErrorKind::Custom(ref e)
+                => write!(f, "{}: {}", (self as &::std::error::Error).description(), *e)
         }
     }
 }
 impl std::error::Error for ErrorKind {
     fn description(&self) -> &str {
         match *self {
+            ErrorKind::Custom(_)
+                => "error",
             ErrorKind::ConvertStr(_)
                 | ErrorKind::ConvertIntError(_)
                 | ErrorKind::ConvertFloatError(_)
@@ -75,6 +80,7 @@ impl std::error::Error for ErrorKind {
             ErrorKind::ConvertFloatError(ref e)                 => Some(e),
             ErrorKind::EscapeUtf8Error(ref e)                   => Some(e),
             ErrorKind::EscapeIntError(ref e)                    => Some(e),
+            ErrorKind::Custom(ref e)                            => Some(&**e),
         }
     }
 }
